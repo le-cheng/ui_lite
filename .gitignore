@@ -18,3 +18,4 @@ Makefile
 
 tools/qt/simulator/uitest/ui_main_widget.h
 tools/qt/simulator/*test/release/moc_*
+build/
