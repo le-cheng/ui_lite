@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2020-2021 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,7 +39,7 @@ void MousewheelInput::MousewheelHandler(QWheelEvent *event)
     if (event == nullptr) {
         return;
     }
-    g_rotate += -event->delta() / 120; // 120 : Qt use 120 as one mousewheel step value
+    g_rotate += -event->angleDelta().y() / 120; // 120 : Qt use 120 as one mousewheel step value
 }
 #endif
 #endif

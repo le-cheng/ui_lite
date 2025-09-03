@@ -367,9 +367,10 @@ INCLUDEPATH += \
     ../../../../../ui_lite/interfaces/kits \
     ../../../../../../../third_party/bounds_checking_function/include \
     ../../../../../../../third_party/harfbuzz \
-    ../../../../../../../third_party/harfbuzz/harfbuzz-2.8.2 \
+    ../../../../../../../third_party/harfbuzz/harfbuzz-11.0.0/src \
     ../../../../../../../third_party/icu/icu4c/source/common \
     ../../../../../../../third_party/freetype/include \
+    ../../../../../../../third_party/freetype/freetype-2.13.3/include \
     ../../../../../../../third_party/cJSON \
     ../../../../../../../third_party/libjpeg-turbo \
     ../../../../../../../third_party/libjpeg-turbo/libjpeg-turbo-2.1.1 \

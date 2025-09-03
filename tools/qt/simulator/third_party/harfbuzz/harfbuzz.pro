@@ -19,8 +19,8 @@ DEFINES += QT_DEPRECATED_WARNINGS
 DESTDIR = ../../libs
 
 HARFBUZZ_PATH = ../../../../../../../../third_party/harfbuzz
-HARFBUZZ_SOURCE_PATH = ../../../../../../../../third_party/harfbuzz/harfbuzz-2.8.2
-system("tar -xf $${HARFBUZZ_PATH}\\harfbuzz-2.8.2.tar.xz -C $${HARFBUZZ_PATH}")
+HARFBUZZ_SOURCE_PATH = ../../../../../../../../third_party/harfbuzz/harfbuzz-11.0.0
+system("tar -xf $${HARFBUZZ_PATH}/harfbuzz-*.tar.xz -C $${HARFBUZZ_PATH}")
 
 SOURCES += \
     $${HARFBUZZ_SOURCE_PATH}/src/hb-aat-layout.cc \
@@ -44,18 +44,18 @@ SOURCES += \
     $${HARFBUZZ_SOURCE_PATH}/src/hb-ot-meta.cc \
     $${HARFBUZZ_SOURCE_PATH}/src/hb-ot-metrics.cc \
     $${HARFBUZZ_SOURCE_PATH}/src/hb-ot-name.cc \
-    $${HARFBUZZ_SOURCE_PATH}/src/hb-ot-shape-complex-arabic.cc \
-    $${HARFBUZZ_SOURCE_PATH}/src/hb-ot-shape-complex-default.cc \
-    $${HARFBUZZ_SOURCE_PATH}/src/hb-ot-shape-complex-hangul.cc \
-    $${HARFBUZZ_SOURCE_PATH}/src/hb-ot-shape-complex-hebrew.cc \
-    $${HARFBUZZ_SOURCE_PATH}/src/hb-ot-shape-complex-indic-table.cc \
-    $${HARFBUZZ_SOURCE_PATH}/src/hb-ot-shape-complex-indic.cc \
-    $${HARFBUZZ_SOURCE_PATH}/src/hb-ot-shape-complex-khmer.cc \
-    $${HARFBUZZ_SOURCE_PATH}/src/hb-ot-shape-complex-myanmar.cc \
-    $${HARFBUZZ_SOURCE_PATH}/src/hb-ot-shape-complex-syllabic.cc \
-    $${HARFBUZZ_SOURCE_PATH}/src/hb-ot-shape-complex-thai.cc \
-    $${HARFBUZZ_SOURCE_PATH}/src/hb-ot-shape-complex-use.cc \
-    $${HARFBUZZ_SOURCE_PATH}/src/hb-ot-shape-complex-vowel-constraints.cc \
+    $${HARFBUZZ_SOURCE_PATH}/src/hb-ot-shaper-arabic.cc \
+    $${HARFBUZZ_SOURCE_PATH}/src/hb-ot-shaper-default.cc \
+    $${HARFBUZZ_SOURCE_PATH}/src/hb-ot-shaper-hangul.cc \
+    $${HARFBUZZ_SOURCE_PATH}/src/hb-ot-shaper-hebrew.cc \
+    $${HARFBUZZ_SOURCE_PATH}/src/hb-ot-shaper-indic-table.cc \
+    $${HARFBUZZ_SOURCE_PATH}/src/hb-ot-shaper-indic.cc \
+    $${HARFBUZZ_SOURCE_PATH}/src/hb-ot-shaper-khmer.cc \
+    $${HARFBUZZ_SOURCE_PATH}/src/hb-ot-shaper-myanmar.cc \
+    $${HARFBUZZ_SOURCE_PATH}/src/hb-ot-shaper-syllabic.cc \
+    $${HARFBUZZ_SOURCE_PATH}/src/hb-ot-shaper-thai.cc \
+    $${HARFBUZZ_SOURCE_PATH}/src/hb-ot-shaper-use.cc \
+    $${HARFBUZZ_SOURCE_PATH}/src/hb-ot-shaper-vowel-constraints.cc \
     $${HARFBUZZ_SOURCE_PATH}/src/hb-ot-shape-fallback.cc \
     $${HARFBUZZ_SOURCE_PATH}/src/hb-ot-shape-normalize.cc \
     $${HARFBUZZ_SOURCE_PATH}/src/hb-ot-shape.cc \
