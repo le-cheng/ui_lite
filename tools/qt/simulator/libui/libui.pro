@@ -4,13 +4,19 @@ TEMPLATE = lib
 
 CONFIG += c++11
 
-QMAKE_CXXFLAGS += -Werror -Wno-error=unused-parameter -Wno-error=attributes
+QMAKE_CXXFLAGS += -Werror 
+QMAKE_CXXFLAGS += -Wno-error=unused-parameter 
+QMAKE_CXXFLAGS += -Wno-error=attributes
 QMAKE_CXXFLAGS += -Wno-error=missing-field-initializers
 QMAKE_CXXFLAGS += -Wno-error=deprecated-copy
 QMAKE_CXXFLAGS += -Wno-error=sign-compare
 QMAKE_CXXFLAGS += -Wno-error=extra
 QMAKE_CXXFLAGS += -Wno-error=format-extra-args
 QMAKE_CXXFLAGS += -Wno-error=format=
+QMAKE_CXXFLAGS += -Wno-error=unknown-pragmas
+QMAKE_CXXFLAGS += -Wno-error=array-bounds=
+QMAKE_CXXFLAGS += -Wno-error=uninitialized
+QMAKE_CXXFLAGS += -Wno-error=strict-aliasing
 
 # The following define makes your compiler emit warnings if you use
 # any Qt feature that has been marked deprecated (the exact warnings
@@ -386,10 +392,11 @@ INCLUDEPATH += \
     ../../../../../../../third_party/freetype/include \
     ../../../../../../../third_party/freetype/freetype-2.13.3/include \
     ../../../../../../../third_party/cJSON \
+    ../../../../../../../third_party/libjpeg-turbo/src \
+    ../../../../../../../third_party/libjpeg-turbo/libjpeg-turbo-3.1.0/src \
     ../../../../../../../third_party/libjpeg-turbo \
-    ../../../../../../../third_party/libjpeg-turbo/libjpeg-turbo-2.1.1 \
     ../../../../../../../third_party/libpng \
-    ../../../../../../../third_party/libpng/libpng-1.6.38 \
+    ../../../../../../../third_party/libpng/libpng-1.6.44 \
     ../../../../../../../third_party/qrcodegen/cpp
 
 

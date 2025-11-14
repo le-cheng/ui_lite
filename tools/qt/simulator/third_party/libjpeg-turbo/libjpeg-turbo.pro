@@ -19,8 +19,8 @@ DEFINES += QT_DEPRECATED_WARNINGS
 DESTDIR = ../../libs
 
 LIBJPEG_TURBO_PATH = ../../../../../../../../third_party/libjpeg-turbo
-LIBJPEG_TURBO_SOURCE_PATH = ../../../../../../../../third_party/libjpeg-turbo/libjpeg-turbo-2.1.1
-system("tar -zxf $${LIBJPEG_TURBO_PATH}\\libjpeg-turbo-2.1.1.tar.gz -C $${LIBJPEG_TURBO_PATH}")
+LIBJPEG_TURBO_SOURCE_PATH = ../../../../../../../../third_party/libjpeg-turbo/libjpeg-turbo-3.1.0/src
+system("tar -zxf $${LIBJPEG_TURBO_PATH}\\libjpeg-turbo-3.1.0.tar.gz -C $${LIBJPEG_TURBO_PATH}")
 
 SOURCES += \
       $${LIBJPEG_TURBO_SOURCE_PATH}/jcapimin.c \
@@ -73,6 +73,32 @@ SOURCES += \
       $${LIBJPEG_TURBO_SOURCE_PATH}/jutils.c \
       $${LIBJPEG_TURBO_SOURCE_PATH}/jsimd_none.c
 
+exists($${LIBJPEG_TURBO_SOURCE_PATH}/jclhuff.c) {
+    SOURCES += $${LIBJPEG_TURBO_SOURCE_PATH}/jclhuff.c
+}
+exists($${LIBJPEG_TURBO_SOURCE_PATH}/jdlhuff.c) {
+    SOURCES += $${LIBJPEG_TURBO_SOURCE_PATH}/jdlhuff.c
+}
+exists($${LIBJPEG_TURBO_SOURCE_PATH}/jcdiffct.c) {
+    SOURCES += $${LIBJPEG_TURBO_SOURCE_PATH}/jcdiffct.c
+}
+exists($${LIBJPEG_TURBO_SOURCE_PATH}/jddiffct.c) {
+    SOURCES += $${LIBJPEG_TURBO_SOURCE_PATH}/jddiffct.c
+}
+exists($${LIBJPEG_TURBO_SOURCE_PATH}/jclossls.c) {
+    SOURCES += $${LIBJPEG_TURBO_SOURCE_PATH}/jclossls.c
+}
+exists($${LIBJPEG_TURBO_SOURCE_PATH}/jdlossls.c) {
+    SOURCES += $${LIBJPEG_TURBO_SOURCE_PATH}/jdlossls.c
+}
+exists($${LIBJPEG_TURBO_SOURCE_PATH}/jpeg_nbits.c) {
+    SOURCES += $${LIBJPEG_TURBO_SOURCE_PATH}/jpeg_nbits.c
+} else:exists($$PWD/jpeg_nbits_table.c) {
+    SOURCES += jpeg_nbits_table.c
+}
+
 INCLUDEPATH += \
-    ../../../../../../../../third_party/libjpeg-turbo \
-    ../../../../../../../../third_party/libjpeg-turbo/libjpeg-turbo-2.1.1/
+    ../../../../../../../../third_party/libjpeg-turbo/src \
+    ../../../../../../../../third_party/libjpeg-turbo/libjpeg-turbo-3.1.0/src
+
+QMAKE_CFLAGS += -O2 -Wall -Wextra -Wno-strict-aliasing -fno-strict-aliasing -Wno-unused-parameter -Wno-unused-variable -Wno-missing-field-initializers

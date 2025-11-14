@@ -65,7 +65,7 @@ __attribute__((unused)) void PrintRenderStats() {
 
     GRAPHIC_LOGI("=== Render Stats (Count: %d) ===", g_viewRenderRecordCount);
     for (uint16_t i = 0; i < g_viewRenderRecordCount; i++) {
-        const char* opName = (g_viewRenderRecords[i].opType == 0) ? "Draw" : "Blit";
+        const char* opName __attribute__((unused)) = (g_viewRenderRecords[i].opType == 0) ? "Draw" : "Blit";
         GRAPHIC_LOGI("%s: id=%s type=%d time=%ums",
             opName,
             g_viewRenderRecords[i].viewId ? g_viewRenderRecords[i].viewId : "(null)",

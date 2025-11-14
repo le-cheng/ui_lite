@@ -42,8 +42,7 @@ public:
                            UITest* uiTest,
                            UILabel* testCaseLabel)
         : rootView_(uiView), mainMenu_(mainMenu), uiTest_(uiTest), testCaseLabel_(testCaseLabel)
-    {
-    }
+    {}
 
     ~BtnOnClickBackListener() {}
 

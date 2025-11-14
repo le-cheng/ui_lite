@@ -341,7 +341,7 @@ uint16_t UINotificationPanel::GetMessageCount()
 
 void UINotificationPanel::OnMessageClicked(UIView& item)
 {
-    UINotificationItem& itemRef = static_cast<UINotificationItem&>(item);
+    __attribute__((unused)) UINotificationItem& itemRef = static_cast<UINotificationItem&>(item);
     GRAPHIC_LOGI("UINotificationPanel::OnMessageClicked messageId=%u", itemRef.GetMessageId());
 
     if (externalMessageListener_ != nullptr) {

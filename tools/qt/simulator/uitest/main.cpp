@@ -48,7 +48,7 @@ int main(int argc, char* argv[])
 
     std::cout << "=== OpenHarmony UI Lite Animation Test Console ===" << std::endl;
     std::cout << "Console output enabled for animation event callback logs" << std::endl;
-    std::cout << "Program starting..." << std::endl;
+    std::cout << "Program starting...\n\n" << std::endl;
 #endif
     OHOS::GraphicStartUp::Init();
     OHOS::Monitor::GetInstance()->InitHal();

@@ -1,4 +1,6 @@
+#!/bin/bash
 # mingw32-make.exe clean
+# rm -rf libs/*
 
 # 遇到错误立刻终止
 set -e
