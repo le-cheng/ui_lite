@@ -629,23 +629,23 @@ void UITestNotificationPanel::AddTestMessage()
     switch (testMessageCounter_ % 5) {
         case 0:
             imagePath =
-                "E:/OpenHarmony-v6.0-Beta1/OpenHarmony-v6.0/foundation/arkui/ui_lite/test/uitest/test_notification_panel/aa-aa.png";
+                "C:/Users/cheng/work/OpenHarmony-v6.0/foundation/arkui/ui_lite/test/uitest/test_notification_panel/aa-aa.png";
             break;
         case 1:
             imagePath =
-                "E:/OpenHarmony-v6.0-Beta1/OpenHarmony-v6.0/foundation/arkui/ui_lite/test/uitest/test_notification_panel/iconfont-27.png";
+                "C:/Users/cheng/work/OpenHarmony-v6.0/foundation/arkui/ui_lite/test/uitest/test_notification_panel/iconfont-27.png";
             break;
         case 2:
             imagePath =
-                "E:/OpenHarmony-v6.0-Beta1/OpenHarmony-v6.0/foundation/arkui/ui_lite/test/uitest/test_notification_panel/iconfont-error.png";
+                "C:/Users/cheng/work/OpenHarmony-v6.0/foundation/arkui/ui_lite/test/uitest/test_notification_panel/iconfont-error.png";
             break;
         case 3:
             imagePath =
-                "E:/OpenHarmony-v6.0-Beta1/OpenHarmony-v6.0/foundation/arkui/ui_lite/test/uitest/test_notification_panel/iconfont_yellow-icon.png";
+                "C:/Users/cheng/work/OpenHarmony-v6.0/foundation/arkui/ui_lite/test/uitest/test_notification_panel/iconfont_yellow-icon.png";
             break;
         default:
             imagePath =
-                "E:/OpenHarmony-v6.0-Beta1/OpenHarmony-v6.0/foundation/arkui/ui_lite/test/uitest/test_notification_panel/iconfont-time.png";
+                "C:/Users/cheng/work/OpenHarmony-v6.0/foundation/arkui/ui_lite/test/uitest/test_notification_panel/iconfont-time.png";
             break;
     }
 
