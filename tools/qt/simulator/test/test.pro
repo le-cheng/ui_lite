@@ -28,7 +28,7 @@ DEFINES += QT_DEPRECATED_WARNINGS \
     "GRAPHIC_ENABLE_PATTERN_FILL_FLAG=1" \
     "GRAPHIC_ENABLE_DRAW_IMAGE_FLAG=1" \
     "GRAPHIC_ENABLE_DRAW_TEXT_FLAG=1" \
-    "DEFAULT_ANIMATION=1" 
+    "DEFAULT_ANIMATION=1"
 
 DEFINES += QT_COMPILER
 #DEFINES += ENABLE_GIFLIB
@@ -88,6 +88,8 @@ SOURCES += \
     ../../../../test/uitest/test_ui_list_view/ui_test_list_layout.cpp \
     ../../../../test/uitest/test_ui_scroll_view/ui_test_ui_scroll_view.cpp \
     ../../../../test/uitest/test_ui_swipe_view/ui_test_ui_swipe_view.cpp \
+    ../../../../test/uitest/test_status_panel/ui_test_status_panel.cpp \
+    ../../../../test/uitest/test_notification_panel/ui_test_notification_panel.cpp \
     ../../../../test/uitest/test_vector_font/ui_test_vector_font.cpp \
     ../../../../test/uitest/test_view_bitmap/ui_test_view_bitmap.cpp \
     ../../../../test/uitest/test_view_bounds/ui_test_view_bounds.cpp \
@@ -143,6 +145,8 @@ HEADERS += \
     ../../../../test/uitest/test_ui_list_view/ui_test_list_layout.h \
     ../../../../test/uitest/test_ui_scroll_view/ui_test_ui_scroll_view.h \
     ../../../../test/uitest/test_ui_swipe_view/ui_test_ui_swipe_view.h \
+    ../../../../test/uitest/test_status_panel/ui_test_status_panel.h \
+    ../../../../test/uitest/test_notification_panel/ui_test_notification_panel.h \
     ../../../../test/uitest/test_vector_font/ui_test_vector_font.h \
     ../../../../test/uitest/test_view_bitmap/ui_test_view_bitmap.h \
     ../../../../test/uitest/test_view_group/ui_test_view_group.h \
@@ -161,13 +165,14 @@ INCLUDEPATH += \
     ../../../../test/framework \
     ../../../../test/framework/include \
     ../../../../test/uitest \
+    ../../../../test/uitest/test_notification_panel \
     ../../../../../../../third_party/bounds_checking_function/include \
     ../../../../../../../third_party/harfbuzz \
     ../../../../../../../third_party/icu/icu4c/source/common \
     ../../../../../../../third_party/freetype/include \
     ../../../../../../../third_party/cJSON \
     ../../../../../../../third_party/libjpeg-turbo \
-    ../../../../../../../third_party/libpng 
+    ../../../../../../../third_party/libpng
 
 if(contains(DEFINES, ENABLE_GIFLIB)){
     INCLUDEPATH += ../../../../../../../third_party/giflib

@@ -23,7 +23,7 @@
 #include "securec.h"
 
 namespace OHOS {
-Text::TextLine Text::textLine_[MAX_LINE_COUNT] = {{0}};
+Text::TextLine Text::textLine_[MAX_LINE_COUNT] = {};
 
 Text::Text()
     : text_(nullptr),

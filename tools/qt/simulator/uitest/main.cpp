@@ -14,6 +14,12 @@
  */
 
 #include <QApplication>
+#include <QDebug>
+#include <QLoggingCategory>
+#include <iostream>
+#include <io.h>
+#include <fcntl.h>
+#include <windows.h>
 
 #include "graphic_config.h"
 #include "main_widget.h"
@@ -23,6 +29,27 @@ extern void RunApp();
 int main(int argc, char* argv[])
 {
     QApplication uitest(argc, argv);
+#ifdef _WIN32
+    // 设置控制台输出编码为UTF-8
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+
+    // 完全屏蔽Qt内部调试日志
+    QLoggingCategory::setFilterRules(
+        "qt.*=false\n"
+        "*.debug=false\n"
+        "*.info=true\n"
+        "*.warning=true\n"
+        "*.critical=true"
+    );
+
+    // 或者设置Qt日志级别为只显示警告和错误
+    qSetMessagePattern("");
+
+    std::cout << "=== OpenHarmony UI Lite Animation Test Console ===" << std::endl;
+    std::cout << "Console output enabled for animation event callback logs" << std::endl;
+    std::cout << "Program starting..." << std::endl;
+#endif
     OHOS::GraphicStartUp::Init();
     OHOS::Monitor::GetInstance()->InitHal();
     OHOS::Monitor::GetInstance()->InitFontEngine();

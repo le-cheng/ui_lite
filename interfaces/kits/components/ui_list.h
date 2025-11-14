@@ -426,6 +426,7 @@ protected:
     void StopAnimator() override;
     bool DragXInner(int16_t distance) override;
     bool DragYInner(int16_t distance) override;
+    virtual void PushBack(UIView* view);
 
 private:
     friend class UIPicker;
@@ -477,7 +478,6 @@ private:
         bool hasInitialiszed_;
     };
 
-    void PushBack(UIView* view);
     void PopItem(UIView* view);
     void PushFront(UIView* view);
     void SetHead(UIView* view);

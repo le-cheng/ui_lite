@@ -4,6 +4,14 @@ TEMPLATE = lib
 
 CONFIG += c++11
 
+QMAKE_CXXFLAGS += -Werror -Wno-error=unused-parameter -Wno-error=attributes
+QMAKE_CXXFLAGS += -Wno-error=missing-field-initializers
+QMAKE_CXXFLAGS += -Wno-error=deprecated-copy
+QMAKE_CXXFLAGS += -Wno-error=sign-compare
+QMAKE_CXXFLAGS += -Wno-error=extra
+QMAKE_CXXFLAGS += -Wno-error=format-extra-args
+QMAKE_CXXFLAGS += -Wno-error=format=
+
 # The following define makes your compiler emit warnings if you use
 # any Qt feature that has been marked deprecated (the exact warnings
 # depend on your compiler). Please consult the documentation of the
@@ -31,7 +39,7 @@ DEFINES += QT_DEPRECATED_WARNINGS \
     "GRAPHIC_ENABLE_DRAW_IMAGE_FLAG=1" \
     "GRAPHIC_ENABLE_DRAW_TEXT_FLAG=1" \
     "ENABLE_CANVAS_EXTEND=1" \
-    "DEFAULT_ANIMATION=1" 
+    "DEFAULT_ANIMATION=1"
 
 
 DEFINES += QT_COMPILER
@@ -103,6 +111,9 @@ SOURCES += \
     ../../../../frameworks/components/ui_repeat_button.cpp \
     ../../../../frameworks/components/ui_scroll_view.cpp \
     ../../../../frameworks/components/ui_slider.cpp \
+    ../../../../frameworks/components/ui_base_panel.cpp \
+    ../../../../frameworks/components/ui_status_panel.cpp \
+    ../../../../frameworks/components/ui_notification_panel.cpp \
     ../../../../frameworks/components/ui_swipe_view.cpp \
     ../../../../frameworks/components/ui_texture_mapper.cpp \
     ../../../../frameworks/components/ui_time_picker.cpp \
@@ -296,6 +307,9 @@ HEADERS += \
     ../../../../interfaces/kits/components/ui_repeat_button.h \
     ../../../../interfaces/kits/components/ui_scroll_view.h \
     ../../../../interfaces/kits/components/ui_slider.h \
+    ../../../../interfaces/kits/components/ui_status_panel.h \
+    ../../../../interfaces/kits/components/ui_notification_panel.h \
+    ../../../../interfaces/kits/components/ui_base_panel.h \
     ../../../../interfaces/kits/components/ui_swipe_view.h \
     ../../../../interfaces/kits/components/ui_texture_mapper.h \
     ../../../../interfaces/kits/components/ui_time_picker.h \

@@ -21,7 +21,7 @@
 namespace OHOS {
 class CacheEntry : public HeapBase {
 public:
-    CacheEntry() : dsc_{0}, life_(0) {}
+    CacheEntry() : dsc_{}, life_(0) {}
 
     ~CacheEntry() {}
 

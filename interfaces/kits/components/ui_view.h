@@ -90,6 +90,8 @@ enum UIViewType : uint8_t {
     UI_TEXTURE_MAPPER,
     UI_DIALOG,
     UI_QRCODE,
+    UI_NOTIFICATION_PANEL,
+    UI_STATUS_PANEL,
     UI_NUMBER_MAX
 };
 
@@ -103,6 +105,7 @@ const char* const VIEW_TYPE_STRING[UI_NUMBER_MAX] = {
     "UIAbstractClock",  "UIAbstractProgress", "UIAbstractScroll", "UIAxis",
     "UIButton",         "UICanvas",           "UIChart",          "UIImageAnimatorView",
     "UIRepeatButton",   "UITextureMapper",    "UIDialog",         "UIQrcode",
+    "UINotificationCenter", "UI_STATUS_PANEL"
 };
 #endif // ENABLE_DEBUG
 
@@ -757,6 +760,25 @@ public:
      * @version 1.0
      */
     bool IsDragParentInstead() const;
+
+    /**
+     * @brief Sets whether external calls to SetDragParentInstead are allowed.
+     * @param allowExternal Specifies whether external calls are allowed.
+     *                      Value <b>true</b> means external calls are allowed,
+     *                      and <b>false</b> means external calls will be ignored.
+     * @since 1.0
+     * @version 1.0
+     */
+    void SetDragParentInsteadAllowed(bool allowExternal);
+
+    /**
+     * @brief Obtains whether external calls to SetDragParentInstead are allowed.
+     * @return Returns <b>true</b> if external calls are allowed;
+     *         returns <b>false</b> otherwise.
+     * @since 1.0
+     * @version 1.0
+     */
+    bool IsDragParentInsteadAllowed() const;
 
     /**
      * @brief Obtains the absolute rectangle area of the view. When the view has deformation such as rotation,
@@ -1506,6 +1528,41 @@ public:
      */
     bool GetBitmap(ImageInfo& bitmap, ColorMode colorMode = ARGB8888);
 
+    /**
+     * @brief Sets the bitmap cache for this view.
+     *
+     * @param bitmap Reference to the ImageInfo containing bitmap data.
+     * @since 1.0
+     * @version 1.0
+     */
+    void SetBitmapCache(const ImageInfo& bitmap);
+
+    /**
+     * @brief Gets the bitmap cache for this view.
+     *
+     * @return Returns reference to the cached bitmap.
+     * @since 1.0
+     * @version 1.0
+     */
+    ImageInfo& GetBitmapCache();
+
+    /**
+     * @brief Clears the bitmap cache for this view.
+     *
+     * @since 1.0
+     * @version 1.0
+     */
+    void ClearBitmapCache();
+
+    /**
+     * @brief Checks if this view has a bitmap cache.
+     *
+     * @return Returns true if bitmap cache exists, false otherwise.
+     * @since 1.0
+     * @version 1.0
+     */
+    bool HasBitmapCache() const;
+
     bool IsOnViewTree();
 
     /**
@@ -1538,6 +1595,7 @@ protected:
     bool visible_ : 1;
     bool draggable_ : 1;
     bool dragParentInstead_ : 1;
+    bool dragParentInsteadAllowed_ : 1;  // 控制SetDragParentInstead是否可以被外部调用
     bool isViewGroup_ : 1;
     bool needRedraw_ : 1;
     bool styleAllocFlag_ : 1;
@@ -1574,6 +1632,7 @@ protected:
 private:
     Rect rect_;
     Rect* visibleRect_;
+    ImageInfo bitmap_;  // Bitmap cache for view snapshot
     void SetupThemeStyles();
 };
 } // namespace OHOS

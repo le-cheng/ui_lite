@@ -23,6 +23,7 @@
 #include "window/window_impl.h"
 #endif
 #include "securec.h"
+#include "hal_tick.h"
 namespace OHOS {
 namespace {
 #if defined(LOCAL_RENDER) && LOCAL_RENDER
@@ -35,6 +36,44 @@ const constexpr uint8_t MAX_INVALIDATE_SIZE = 24;
 #endif
 static Rect g_maskStack[COMPONENT_NESTING_DEPTH];
 static UIView* g_viewStack[VIEW_STACK_DEPTH];
+// 渲染计时记录结构与数组
+struct ViewRenderRecord {
+    const char* viewId;
+    int16_t viewType;
+    uint32_t durationMs;
+    uint8_t opType; // 0=OnDraw, 1=BlitMapBuffer
+};
+static ViewRenderRecord g_viewRenderRecords[256];
+static uint16_t g_viewRenderRecordCount = 0;
+
+// 内联函数：记录渲染耗时
+inline void RecordRenderTime(UIView* view, uint32_t startTick, uint8_t opType) {
+    if (g_viewRenderRecordCount >= sizeof(g_viewRenderRecords)/sizeof(g_viewRenderRecords[0])) {
+        return; // 数组已满，直接返回
+    }
+    uint32_t elapsed = HALTick::GetInstance().GetElapseTime(startTick);
+    g_viewRenderRecords[g_viewRenderRecordCount].viewId = view->GetViewId();
+    g_viewRenderRecords[g_viewRenderRecordCount].viewType = static_cast<int16_t>(view->GetViewType());
+    g_viewRenderRecords[g_viewRenderRecordCount].durationMs = elapsed;
+    g_viewRenderRecords[g_viewRenderRecordCount].opType = opType;
+    g_viewRenderRecordCount++;
+}
+
+// 批量输出渲染统计（函数当前未在发布路径调用，标注避免编译告警）
+__attribute__((unused)) void PrintRenderStats() {
+    if (g_viewRenderRecordCount == 0) return;
+
+    GRAPHIC_LOGI("=== Render Stats (Count: %d) ===", g_viewRenderRecordCount);
+    for (uint16_t i = 0; i < g_viewRenderRecordCount; i++) {
+        const char* opName = (g_viewRenderRecords[i].opType == 0) ? "Draw" : "Blit";
+        GRAPHIC_LOGI("%s: id=%s type=%d time=%ums",
+            opName,
+            g_viewRenderRecords[i].viewId ? g_viewRenderRecords[i].viewId : "(null)",
+            g_viewRenderRecords[i].viewType,
+            g_viewRenderRecords[i].durationMs);
+    }
+    GRAPHIC_LOGI("=== End Render Stats ===");
+}
 } // namespace
 RootView::RootView()
 {
@@ -630,6 +669,7 @@ void RootView::DrawTop(UIView* view, const Rect& rect)
         return;
     }
 
+    g_viewRenderRecordCount = 0;
     int16_t stackCount = 0;
     UIView* par = view->GetParent();
     if (par == nullptr) {
@@ -676,10 +716,14 @@ void RootView::DrawTop(UIView* view, const Rect& rect)
                             UpdateMapBufferInfo(invalidatedArea);
                             updateMapBufferInfo = true;
                         }
+                        uint32_t __startTick = HALTick::GetInstance().GetTime();
                         curView->OnDraw(*dc_.mapBufferInfo, invalidatedArea);
+                        RecordRenderTime(curView, __startTick, 0);
                         curViewRect = invalidatedArea;
                     } else {
+                        uint32_t __startTick2 = HALTick::GetInstance().GetTime();
                         curView->OnDraw(*dc_.bufferInfo, curViewRect);
+                        RecordRenderTime(curView, __startTick2, 0);
                     }
 
                     if ((curView->IsViewGroup()) && (stackCount < COMPONENT_NESTING_DEPTH)) {
@@ -703,7 +747,9 @@ void RootView::DrawTop(UIView* view, const Rect& rect)
                     }
 
                     if (enableAnimator && (transViewGroup == nullptr)) {
+                        uint32_t __blitStart = HALTick::GetInstance().GetTime();
                         BlitMapBuffer(origRect, curTransMap, mask);
+                        RecordRenderTime(curView, __blitStart, 1);
                         if (updateMapBufferInfo) {
                             RestoreMapBufferInfo();
                             updateMapBufferInfo = false;
@@ -728,7 +774,9 @@ void RootView::DrawTop(UIView* view, const Rect& rect)
             }
 
             if (enableAnimator && transViewGroup == g_viewStack[stackCount]) {
+                uint32_t __blitStartGroup = HALTick::GetInstance().GetTime();
                 BlitMapBuffer(origRect, curTransMap, mask);
+                RecordRenderTime(transViewGroup, __blitStartGroup, 1);
                 if (updateMapBufferInfo) {
                     RestoreMapBufferInfo();
                     updateMapBufferInfo = false;
@@ -752,6 +800,9 @@ void RootView::DrawTop(UIView* view, const Rect& rect)
         }
         par = par->GetParent();
     }
+
+    // 批量输出渲染统计信息，减少运行时日志开销
+    // PrintRenderStats();
 }
 
 UIView* RootView::GetTopUIView(const Rect& rect)
@@ -839,7 +890,7 @@ void RootView::InitMapBufferInfo(BufferInfo* bufferInfo)
     dc_.mapBufferInfo->mode = ARGB8888;
     dc_.mapBufferInfo->stride = dc_.mapBufferInfo->width * (DrawUtils::GetPxSizeByColorMode(dc_.mapBufferInfo->mode) >>
                                                             3); // 3: Shift right 3 bits
-    
+
     BaseGfxEngine* baseGfxEngine = BaseGfxEngine::GetInstance();
     baseGfxEngine->AdjustLineStride(*dc_.mapBufferInfo);
     uint32_t bufferSize = dc_.mapBufferInfo->stride * dc_.mapBufferInfo->height;

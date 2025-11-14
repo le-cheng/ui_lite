@@ -94,8 +94,8 @@ void UIRadioButton::OnDraw(BufferInfo& gfxDstBuffer, const Rect& invalidatedArea
         int16_t dy = height_ >> 1;
         int16_t x = contentRect.GetX() + dx;
         int16_t y = contentRect.GetY() + dy;
-        ArcInfo arcInfoBig = {{x, y}, {0}, radiusBig_, 0, CIRCLE_IN_DEGREE, nullptr};
-        ArcInfo arcInfoSmall = {{x, y}, {0}, currentRadius_, 0, CIRCLE_IN_DEGREE, nullptr};
+        ArcInfo arcInfoBig = {{x, y}, {0, 0}, radiusBig_, 0, CIRCLE_IN_DEGREE, nullptr};
+        ArcInfo arcInfoSmall = {{x, y}, {0, 0}, currentRadius_, 0, CIRCLE_IN_DEGREE, nullptr};
         Rect trunc = invalidatedArea;
         bool isIntersect = trunc.Intersect(trunc, contentRect);
         if (isIntersect) {

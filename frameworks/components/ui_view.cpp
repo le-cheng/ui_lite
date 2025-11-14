@@ -33,6 +33,7 @@ UIView::UIView()
       visible_(true),
       draggable_(false),
       dragParentInstead_(true),
+      dragParentInsteadAllowed_(true),  // 默认允许外部调用SetDragParentInstead
       isViewGroup_(false),
       needRedraw_(false),
       styleAllocFlag_(false),
@@ -61,7 +62,8 @@ UIView::UIView()
 #endif
       viewExtraMsg_(nullptr),
       rect_(0, 0, 0, 0),
-      visibleRect_(nullptr)
+      visibleRect_(nullptr),
+      bitmap_({})
 {
     SetupThemeStyles();
 }
@@ -75,6 +77,9 @@ UIView::~UIView()
     if (visibleRect_ != nullptr) {
         delete visibleRect_;
         visibleRect_ = nullptr;
+    }
+    if (bitmap_.data != nullptr) {
+        ImageCacheFree(bitmap_);
     }
     if (styleAllocFlag_) {
         delete style_;
@@ -669,12 +674,24 @@ bool UIView::IsDraggable() const
 
 void UIView::SetDragParentInstead(bool dragParentInstead)
 {
-    dragParentInstead_ = dragParentInstead;
+    if (IsDragParentInsteadAllowed()) {
+        dragParentInstead_ = dragParentInstead;
+    }
 }
 
 bool UIView::IsDragParentInstead() const
 {
     return dragParentInstead_;
+}
+
+void UIView::SetDragParentInsteadAllowed(bool allowExternal)
+{
+    dragParentInsteadAllowed_ = allowExternal;
+}
+
+bool UIView::IsDragParentInsteadAllowed() const
+{
+    return dragParentInsteadAllowed_;
 }
 
 #if ENABLE_ROTATE_INPUT
@@ -1344,6 +1361,32 @@ bool UIView::GetBitmap(ImageInfo& imageInfo, ColorMode colorMode)
     parent_ = tempParent;
     rect_.SetPosition(tempX, tempY);
     return true;
+}
+
+void UIView::SetBitmapCache(const ImageInfo& bitmap)
+{
+    if (bitmap_.data != nullptr) {
+        ClearBitmapCache();
+    }
+    bitmap_ = bitmap;
+}
+
+ImageInfo& UIView::GetBitmapCache()
+{
+    return bitmap_;
+}
+
+void UIView::ClearBitmapCache()
+{
+    if (bitmap_.data != nullptr) {
+        ImageCacheFree(bitmap_);
+        bitmap_ = {};
+    }
+}
+
+bool UIView::HasBitmapCache() const
+{
+    return bitmap_.data != nullptr;
 }
 
 bool UIView::IsOnViewTree()
