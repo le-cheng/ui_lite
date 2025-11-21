@@ -177,6 +177,24 @@ public:
     virtual ~OnMessageListener() {}
     virtual void OnMessageClicked(UIView& item) {}
     virtual void OnMessageDeleted(UIView& item) {}
+    virtual void OnExitAppMessages(UIView& item) {}
+    virtual void OnClearMessages() {}
+};
+
+class INotificationDataProvider : public HeapBase {
+public:
+    virtual ~INotificationDataProvider() {}
+    virtual uint16_t GetAppCount() const = 0;
+    virtual List<MessageData>* GetMessagesByAppIndex(int16_t index) const = 0;
+    virtual List<MessageData>* GetMessagesByAppName(const char* appName) const = 0;
+    virtual uint16_t GetMessagesCountByAppName(const char* appName) const = 0;
+    virtual MessageData* GetAppMessageByIndex(const char* appName, int16_t index) = 0;
+
+    virtual void AddMessage(const MessageData& message) = 0;
+    virtual uint32_t RemoveMessageById(const char* appName, uint32_t messageId) = 0;
+    virtual void RemoveMessagesByAppName(const char* appName) = 0;
+    virtual void ClearAll() = 0;
+    virtual int16_t GetTotalMessageCount() const = 0;
 };
 
 class UINotificationItem : public UIViewGroup, public UIView::OnClickListener, public Animator, public AnimatorCallback {
@@ -189,6 +207,7 @@ public:
     uint32_t GetMessageId() const;
     void SetMessageId(uint32_t messageId);
 
+    const char* GetAppName() const { return appName_; }
     void SetAppName(const char* appName);
     void SetRead(bool isRead);
 
@@ -204,6 +223,7 @@ public:
     void UpdateChildPosition(int16_t offsetX);
     void SetChildPosition(int16_t x);
     void UpdateMessageItem(const MessageData& message);
+    void SetAsFooter(bool isFooter);
 
     // 动画相关定义
     enum AnimationState : uint8_t {
@@ -234,6 +254,7 @@ private:
     int messageNumber_;
     uint32_t messageId_;
     char appName_[MessageData::MAX_APP_NAME_LEN];
+    bool isFooter_ = false;
 
     // 动画相关成员
     EasingFunc easingFunc_;
@@ -253,32 +274,8 @@ public:
     MessageAdapter();
     virtual ~MessageAdapter();
 
-    // AbstractAdapter接口实现
     uint16_t GetCount() override;
     UIView* GetView(UIView* inView, int16_t index) override;
-
-    /**
-     * @brief 设置消息数据列表
-     * @param messages 消息数据列表
-     */
-    void SetData(List<MessageData>* messages);
-
-    /**
-     * @brief 添加单个消息
-     * @param message 消息数据
-     */
-    void AddMessage(const MessageData& message);
-
-    /**
-     * @brief 移除指定ID的消息
-     * @param messageId 消息ID
-     */
-    void RemoveMessageById(uint32_t messageId);
-
-    /**
-     * @brief 清空所有分组及其消息数据（仅数据层，不涉及视图）
-     */
-    void ClearAllGroupData();
 
     void SetMessageListener(OnMessageListener* listener)
     {
@@ -290,50 +287,28 @@ public:
         return itemListener_;
     }
 
-    uint16_t GetTotalMessageCount() const;
+    void SetDataProvider(INotificationDataProvider* provider)
+    {
+        dataProvider_ = provider;
+    }
+
+    enum ViewMode : uint8_t { GROUP_SUMMARY = 0, APP_DETAIL = 1 };
+    void SetMode(ViewMode mode) { mode_ = mode; }
+    ViewMode GetMode() const { return mode_; }
+    void SetAppName(const char* appName)
+    {
+        MessageData::SafeCopyString(appName_, appName, MessageData::MAX_APP_NAME_LEN);
+    }
+    const char* GetAppName() const { return appName_; }
+
     UINotificationItem* CreateMessageItem(UIView* inView);
-
+    void DeleteView(UIView*& view) override;
 private:
-    struct NotificationGroupData_t {
-        char appName[MessageData::MAX_APP_NAME_LEN];
-        char appIconPath[MessageData::MAX_ICON_PATH_LEN];
-        List<MessageData> messages;
-
-        NotificationGroupData_t()
-        {
-            appName[0] = '\0';
-            appIconPath[0] = '\0';
-        }
-
-        ~NotificationGroupData_t()
-        {
-            messages.Clear();
-        }
-    };
-
-    List<NotificationGroupData_t*> groups_;
+    uint16_t GetOriginCount();
     OnMessageListener* itemListener_;
-
-    /**
-     * @brief 查找或创建分组数据（按应用名）
-     * @param appName 应用名（不能为空）
-     * @param appIconPath 应用图标路径（可为空，仅在新建分组时写入）
-     * @return 分组数据指针，失败返回 nullptr
-     */
-    NotificationGroupData_t* FindOrCreateGroupData(const char* appName, const char* appIconPath);
-
-    /**
-     * @brief 获取指定索引的分组数据
-     * @param index 分组索引
-     * @return 分组数据指针，失败返回 nullptr
-     */
-    NotificationGroupData_t* GetGroupDataByIndex(uint16_t index);
-
-    /**
-     * @brief 移除空分组数据（当分组内消息数量为 0 时）
-     */
-    void RemoveEmptyGroups();
-
+    INotificationDataProvider* dataProvider_ = nullptr;
+    ViewMode mode_ = GROUP_SUMMARY;
+    char appName_[MessageData::MAX_APP_NAME_LEN];
 };
 
 class UINotificationPanel : public UIBasePanel, public OnMessageListener {
@@ -349,35 +324,8 @@ public:
     // ============================================================================
     // 消息管理接口
     // ============================================================================
-
-    /**
-     * @brief 添加消息到通知面板
-     * @param message 消息数据
-     */
-    void AddMessage(const MessageData& message);
-
-    /**
-     * @brief 移除指定ID的消息
-     * @param messageId 消息ID
-     */
-    void RemoveMessage(uint32_t messageId);
-
-    /**
-     * @brief 清空所有消息
-     */
-    void ClearAllMessages();
-
-    /**
-     * @brief 获取消息数量
-     * @return 消息数量
-     */
-    uint16_t GetMessageCount();
-
-    /**
-     * @brief 刷新消息列表显示
-     */
+    uint32_t RemoveMessage(const char* appName, uint32_t messageId);
     void RefreshMessages();
-
     void SetMessageListener(OnMessageListener* listener)
     {
         externalMessageListener_ = listener;
@@ -385,14 +333,25 @@ public:
 
     void OnMessageClicked(UIView& item) override;
     void OnMessageDeleted(UIView& item) override;
+    void OnExitAppMessages(UIView& item) override;
+    void OnClearMessages() override;
     void GetTargetView(const Point& point, UIView** current, UIView** target) override;
+
+    void ShowAppMessageList(const char* appName);
+    void ShowMainMessageList();
+
+    void SetDataProvider(INotificationDataProvider* provider)
+    {
+        dataProvider_ = provider;
+        messageAdapter_.SetDataProvider(provider);
+    }
+    void RemoveAppMessages(const char* appName);
 
 protected:
     bool InitializeComponents();
 
 private:
     bool CreateHandleView();
-    bool CreateTitleLabel();
     bool CreateMessageList();
     bool CreateEmptyView();
     void UpdateEmptyStateVisibility();
@@ -401,7 +360,7 @@ private:
     UICircleList* messageList_;
     UIViewGroup* headerView_;
     UIView* handleView_;
-    UILabel* titleLabel_;
+
     // 空状态视图组件
     UIViewGroup* emptyView_;
     UIView* emptyIconView_;
@@ -409,6 +368,7 @@ private:
     MessageAdapter messageAdapter_;
     OnMessageListener* externalMessageListener_;
     bool isInitialized_;
+    INotificationDataProvider* dataProvider_ = nullptr;
 };
 
 } // namespace OHOS

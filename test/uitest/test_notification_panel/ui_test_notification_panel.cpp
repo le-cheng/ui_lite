@@ -20,6 +20,233 @@
 
 namespace OHOS {
 
+class NotiDataProvider : public INotificationDataProvider {
+public:
+    NotiDataProvider() {}
+    ~NotiDataProvider() override { ClearAll(); }
+    uint16_t GetAppCount() const override
+    {
+        return groups_.Size();
+    }
+
+    List<MessageData>* GetMessagesByAppIndex(int16_t index) const override
+    {
+        if (index < 0 || index >= groups_.Size()) {
+            return nullptr;
+        }
+        Group* g = GetAppByIndex(index);
+        return g ? &g->messages : nullptr;
+    }
+
+    List<MessageData>* GetMessagesByAppName(const char* appName) const override
+    {
+        ListNode<Group*>* node = GetAppNodeByName(appName);
+        if (node == nullptr) {
+            return nullptr;
+        }
+        Group* g = node->data_;
+        return (g != nullptr) ? &g->messages : nullptr;
+    }
+
+    uint16_t GetMessagesCountByAppName(const char* appName) const override
+    {
+        List<MessageData>* messages = GetMessagesByAppName(appName);
+        return (messages != nullptr) ? messages->Size() : 0;
+    }
+
+    MessageData* GetAppMessageByIndex(const char* appName, int16_t index) override
+    {
+        if (index < 0) {
+            return nullptr;
+        }
+        List<MessageData>* messages = GetMessagesByAppName(appName);
+        if (messages == nullptr || messages->Size() == 0 || index >= messages->Size()) {
+            return nullptr;
+        }
+        ListNode<MessageData>* msg = messages->Begin();
+        const ListNode<MessageData>* msgEnd = messages->End();
+        for (int16_t i = 0; i < index && msg != msgEnd; i++) {
+            msg = messages->Next(msg);
+        }
+        if (msg == msgEnd) {
+            return nullptr;
+        }
+        return &msg->data_;
+    }
+
+    void AddMessage(const MessageData& message) override
+    {
+        Group* g = FindOrCreateGroup(message.appName);
+        if (g != nullptr) {
+            MessageData::SafeCopyString(g->appIconPath, message.iconPath, sizeof(g->appIconPath));
+            g->messages.PushFront(message);
+        }
+    }
+
+    uint32_t RemoveMessageById(const char* appName, uint32_t messageId) override
+    {
+        if (appName == nullptr) {
+            return 0;
+        }
+        ListNode<Group*>* node = GetAppNodeByName(appName);
+        if (node == nullptr) {
+            return 0;
+        }
+        Group* g = node->data_;
+        if (g == nullptr) {
+            return 0;
+        }
+        if (g->messages.IsEmpty()) {
+            RemoveGroupNode(node);
+            return 0;
+        }
+
+        ListNode<MessageData>* msg = g->messages.Begin();
+        const ListNode<MessageData>* end = g->messages.End();
+        while (msg != end) {
+            if (msg->data_.messageId == messageId) {
+                g->messages.Remove(msg);
+                if (g->messages.IsEmpty()) {
+                    RemoveGroupNode(node);
+                    return 0;
+                }
+                break;
+            }
+            msg = g->messages.Next(msg);
+        }
+        return g->messages.Size();
+    }
+
+    void RemoveMessagesByAppName(const char* appName) override
+    {
+        if (appName == nullptr) {
+            return;
+        }
+        ListNode<Group*>* node = GetAppNodeByName(appName);
+        if (node == nullptr) {
+            return;
+        }
+        RemoveGroupNode(node);
+    }
+
+    void ClearAll() override
+    {
+        ListNode<Group*>* node = groups_.Begin();
+        const ListNode<Group*>* end = groups_.End();
+        while (node != end) {
+            node = RemoveGroupNode(node);
+        }
+    }
+
+    int16_t GetTotalMessageCount() const override
+    {
+        int16_t total = 0;
+        ListNode<Group*>* node = const_cast<List<Group*>&>(groups_).Begin();
+        const ListNode<Group*>* end = const_cast<List<Group*>&>(groups_).End();
+        while (node != end) {
+            Group* g = node->data_;
+            if (g != nullptr) {
+                total += g->messages.Size();
+            }
+            node = const_cast<List<Group*>&>(groups_).Next(node);
+        }
+        return total;
+    }
+private:
+    struct Group {
+        char appName[MessageData::MAX_APP_NAME_LEN];
+        char appIconPath[MessageData::MAX_ICON_PATH_LEN];
+        List<MessageData> messages;
+        Group() { appName[0] = '\0'; appIconPath[0] = '\0'; }
+    };
+
+    List<Group*> groups_;
+
+    Group* GetAppByIndex(int16_t index) const
+    {
+        if (index < 0) {
+            return nullptr;
+        }
+        ListNode<Group*>* node = groups_.Begin();
+        const ListNode<Group*>* end = groups_.End();
+        for (int16_t i = 0; i < index && node != end; ++i) {
+            node = groups_.Next(node);
+        }
+        if (node == nullptr || node == end) {
+            return nullptr;
+        }
+        return node->data_;
+    }
+
+    ListNode<Group*>* GetAppNodeByName(const char* appName) const
+    {
+        if (appName == nullptr) {
+            return nullptr;
+        }
+        ListNode<Group*>* node = groups_.Begin();
+        const ListNode<Group*>* end = groups_.End();
+        while (node != end) {
+            Group* g = node->data_;
+            if (g != nullptr && strcmp(g->appName, appName) == 0) {
+                return node;
+            }
+            node = groups_.Next(node);
+        }
+        return nullptr;
+    }
+
+    Group* FindOrCreateGroup(const char* appName)
+    {
+        if (appName == nullptr) {
+            return nullptr;
+        }
+        ListNode<Group*>* node = groups_.Begin();
+        const ListNode<Group*>* end = groups_.End();
+        while (node != end) {
+            Group* g = node->data_;
+            if (g != nullptr && strcmp(g->appName, appName) == 0) {
+                return g;
+            }
+            node = groups_.Next(node);
+        }
+        Group* ng = new Group();
+        if (ng == nullptr) {
+            return nullptr;
+        }
+        MessageData::SafeCopyString(ng->appName, appName, sizeof(ng->appName));
+        groups_.PushFront(ng);
+        return ng;
+    }
+
+    void RemoveEmptyGroups()
+    {
+        ListNode<Group*>* node = groups_.Begin();
+        const ListNode<Group*>* end = groups_.End();
+        while (node != end) {
+            Group* g = node->data_;
+            if (g != nullptr && g->messages.IsEmpty()) {
+                node = RemoveGroupNode(node);
+            } else {
+                node = groups_.Next(node);
+            }
+        }
+    }
+
+    ListNode<Group*>* RemoveGroupNode(ListNode<Group*>* node)
+    {
+        if (node == nullptr) {
+            return nullptr;
+        }
+        Group* g = node->data_;
+        if (g != nullptr) {
+            g->messages.Clear();
+            delete g;
+            g = nullptr;
+        }
+        return groups_.Remove(node);
+    }
+};
+
 // UITestNotificationPanel implementation
 void UITestNotificationPanel::SetUp()
 {
@@ -31,8 +258,13 @@ void UITestNotificationPanel::SetUp()
 
 void UITestNotificationPanel::TearDown()
 {
-    DeleteChildren(container_);
-    container_ = nullptr;
+    if (container_ != nullptr) {
+        if (container_->IsViewGroup()) {
+            DeleteChildren(static_cast<UIViewGroup*>(container_)->GetChildrenHead());
+        }
+        delete container_;
+        container_ = nullptr;
+    }
     watchFaceContainer_ = nullptr;
     watchFaceBackground_ = nullptr;
     notificationPanel_ = nullptr;
@@ -64,6 +296,10 @@ void UITestNotificationPanel::TearDown()
     lastX_ = 0;
     lastY_ = 0;
     testMessageCounter_ = 0;
+    if (dataProvider_ != nullptr) {
+        delete dataProvider_;
+        dataProvider_ = nullptr;
+    }
 }
 
 const UIView* UITestNotificationPanel::GetTestView()
@@ -76,6 +312,7 @@ const UIView* UITestNotificationPanel::GetTestView()
     UIKitNotificationPanelTestSwipeGesture005();
     UIKitNotificationPanelTestColorSettings006();
     UIKitNotificationPanelTestIconSettings007();
+    UIKitNotificationPanelTestAppExpansion008();
     return container_;
 }
 
@@ -291,6 +528,34 @@ void UITestNotificationPanel::UIKitNotificationPanelTestColorSettings006()
     lastY_ += BUTTON_HEIGHT2 + NOTIFICATION_DEFAULT_GAP;
 }
 
+void UITestNotificationPanel::UIKitNotificationPanelTestAppExpansion008()
+{
+    if (container_ == nullptr) {
+        return;
+    }
+
+    UILabel* label = new UILabel();
+    container_->Add(label);
+    label->SetPosition(lastX_, lastY_, 200, TITLE_LABEL_DEFAULT_HEIGHT);
+    label->SetText("应用消息展开测试");
+    label->SetFont(DEFAULT_VECTOR_FONT_FILENAME, FONT_DEFAULT_SIZE);
+    SetLastPos(label);
+
+    UILabel* instructionLabel = new UILabel();
+    container_->Add(instructionLabel);
+    instructionLabel->SetPosition(lastX_, lastY_, 400, TITLE_LABEL_DEFAULT_HEIGHT);
+    instructionLabel->SetText("点击消息项可展开显示该应用的所有消息");
+    instructionLabel->SetFont(DEFAULT_VECTOR_FONT_FILENAME, FONT_DEFAULT_SIZE);
+    SetLastPos(instructionLabel);
+
+    UILabel* backButtonLabel = new UILabel();
+    container_->Add(backButtonLabel);
+    backButtonLabel->SetPosition(lastX_, lastY_, 400, TITLE_LABEL_DEFAULT_HEIGHT);
+    backButtonLabel->SetText("展开后点击返回按钮可回到主列表");
+    backButtonLabel->SetFont(DEFAULT_VECTOR_FONT_FILENAME, FONT_DEFAULT_SIZE);
+    SetLastPos(backButtonLabel);
+}
+
 void UITestNotificationPanel::UIKitNotificationPanelTestIconSettings007()
 {
     if (container_ == nullptr) {
@@ -334,11 +599,11 @@ bool UITestNotificationPanel::OnClick(UIView& view, const ClickEvent& event)
         notificationPanel_->HidePanel();
     } else if (strcmp(id, UI_TEST_NOTIFICATION_ADD_MESSAGE) == 0) {
         AddTestMessage();
+        notificationPanel_->RefreshMessages();
         UpdateStatusInfo();
     } else if (strcmp(id, UI_TEST_NOTIFICATION_CLEAR_MESSAGES) == 0) {
-        if (notificationPanel_ != nullptr) {
-            notificationPanel_->ClearAllMessages();
-        }
+        dataProvider_->ClearAll();
+        notificationPanel_->RefreshMessages();
         UpdateStatusInfo();
     } else if (strcmp(id, UI_TEST_NOTIFICATION_TOGGLE_PANEL) == 0) {
         notificationPanel_->TogglePanel();
@@ -429,7 +694,7 @@ void UITestNotificationPanel::OnPositionChanged(UIBasePanel& panel, float positi
     // Update panel content based on position
     if (panelContentLabel_ != nullptr && position > 0.3f && notificationPanel_ != nullptr) {
         char contentText[256];
-        const int messageCount = notificationPanel_->GetMessageCount();
+        const int messageCount = dataProvider_->GetTotalMessageCount();
         snprintf(contentText, sizeof(contentText), "通知面板\n新消息: %d条\n位置: %.1f%%\n状态: %s\n时间: 12:34",
                  messageCount, position * 100, panel.IsVisible() ? "显示中" : "隐藏");
         panelContentLabel_->SetText(contentText);
@@ -442,8 +707,15 @@ void UITestNotificationPanel::OnPositionChanged(UIBasePanel& panel, float positi
 void UITestNotificationPanel::OnMessageClicked(UIView& item)
 {
     UINotificationItem& itemRef = static_cast<UINotificationItem&>(item);
-    GRAPHIC_LOGI("UITestNotificationPanel::OnMessageClicked messageId=%u", itemRef.GetMessageId());
-    // 处理消息点击事件
+    GRAPHIC_LOGI("UITestNotificationPanel::OnMessageClicked messageId=%u, appName=%s",
+                 itemRef.GetMessageId(), itemRef.GetAppName());
+
+    if (stateLabel_ != nullptr) {
+        char statusText[128];
+        snprintf(statusText, sizeof(statusText), "状态: 展开应用 %s", itemRef.GetAppName());
+        stateLabel_->SetText(statusText);
+        stateLabel_->Invalidate();
+    }
 }
 
 void UITestNotificationPanel::OnMessageDeleted(UIView& item)
@@ -453,6 +725,14 @@ void UITestNotificationPanel::OnMessageDeleted(UIView& item)
 
     // UINotificationPanel 已经内部处理删除，这里只需要更新显示
     UpdateStatusInfo();
+}
+
+void UITestNotificationPanel::OnExitAppMessages(UIView& item)
+{
+    if (stateLabel_ != nullptr) {
+        stateLabel_->SetText("状态: 返回主列表");
+        stateLabel_->Invalidate();
+    }
 }
 
 void UITestNotificationPanel::UpdateStatusInfo()
@@ -476,13 +756,12 @@ void UITestNotificationPanel::UpdateStatusInfo()
 
     if (messageCountLabel_ != nullptr) {
         char countText[32];
-        const int messageCount = notificationPanel_ ? notificationPanel_->GetMessageCount() : 0;
+        const int messageCount = dataProvider_->GetTotalMessageCount();
         snprintf(countText, sizeof(countText), "消息数量: %d", messageCount);
         messageCountLabel_->SetText(countText);
         messageCountLabel_->Invalidate();
     }
 
-    // Update configuration info as well
     UpdateConfigInfo();
 }
 
@@ -595,15 +874,22 @@ void UITestNotificationPanel::CreateWatchFace()
     notificationPanel_->SetAutoCompleteThreshold(0.5f);
     notificationPanel_->SetOnPanelListener(this);
     notificationPanel_->SetMessageListener(this); // 设置消息监听器
+
     // notificationPanel_->SetStyle(STYLE_BACKGROUND_COLOR, Color::Gray().full);
     notificationPanel_->SetStyle(STYLE_BACKGROUND_OPA, OPA_TRANSPARENT);
     notificationPanel_->SetStyle(STYLE_BORDER_RADIUS, NOTIFICATION_WATCH_FACE_RADIUS);
     notificationPanel_->SetAnimationDuration(500);
 
+    if (dataProvider_ == nullptr) {
+        dataProvider_ = new NotiDataProvider();
+    }
+    notificationPanel_->SetDataProvider(dataProvider_);
+
     // 添加一些测试消息
-    AddTestMessage();
-    AddTestMessage();
-    AddTestMessage();
+    for (int i = 0; i < 8; ++i) {
+        AddTestMessage();
+    }
+    notificationPanel_->RefreshMessages();
 }
 
 void UITestNotificationPanel::AddTestMessage()
@@ -618,8 +904,13 @@ void UITestNotificationPanel::AddTestMessage()
     // 生成测试消息内容（现在可以安全使用局部变量，MessageData会拷贝内容）
     char title[64];
     char content[128];
-    snprintf(title, sizeof(title), "消息 %d", testMessageCounter_);
-    snprintf(content, sizeof(content), "这是第 %d 条测试消息的内容", testMessageCounter_);
+
+    // 创建不同的应用名称以测试应用展开功能
+    const char* appNames[] = {"微信", "支付宝", "钉钉", "淘宝", "京东"};
+    const char* currentApp = appNames[testMessageCounter_ % 5];
+
+    snprintf(title, sizeof(title), "%s消息 %d", currentApp, testMessageCounter_);
+    snprintf(content, sizeof(content), "这是来自 %s 的第 %d 条测试消息", currentApp, testMessageCounter_);
 
     ColorType colorTable[] = {Color::Red(), Color::Green(), Color::Blue(), Color::Yellow(), Color::White()};
     ColorType color = colorTable[testMessageCounter_ % 5];
@@ -649,14 +940,11 @@ void UITestNotificationPanel::AddTestMessage()
             break;
     }
 
-    char appName[16];
-    snprintf(appName, sizeof(appName), "App%d", (testMessageCounter_ % 5));
-
-    MessageData message(appName, title, content, "12:34", testMessageCounter_,
+    MessageData message(currentApp, title, content, "12:34", testMessageCounter_,
                         static_cast<MessageType>(testMessageCounter_ % 4),
                         false, color, imagePath);
-    GRAPHIC_LOGI("AddTestMessage: %s", appName);
-    notificationPanel_->AddMessage(message);
+    GRAPHIC_LOGI("AddTestMessage: %s", currentApp);
+    dataProvider_->AddMessage(message);
     GRAPHIC_LOGI(" ");
 }
 
@@ -697,7 +985,8 @@ void UITestNotificationPanel::AddTestMessageWithColor(ColorType color)
                         static_cast<MessageType>(testMessageCounter_ % 4),
                         false, color, nullptr);
 
-    notificationPanel_->AddMessage(message);
+    dataProvider_->AddMessage(message);
+    notificationPanel_->RefreshMessages();
 }
 
 void UITestNotificationPanel::AddTestMessageWithIcon(const char* iconPath)
@@ -724,7 +1013,8 @@ void UITestNotificationPanel::AddTestMessageWithIcon(const char* iconPath)
                         static_cast<MessageType>(testMessageCounter_ % 4),
                         false, Color::White(), iconPath);
 
-    notificationPanel_->AddMessage(message);
+    dataProvider_->AddMessage(message);
+    notificationPanel_->RefreshMessages();
 }
 
 } // namespace OHOS

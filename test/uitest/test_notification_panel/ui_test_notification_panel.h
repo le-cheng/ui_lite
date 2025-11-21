@@ -70,6 +70,7 @@ public:
     void OnPositionChanged(UIBasePanel& panel, float position) override;
     void OnMessageClicked(UIView& item) override;
     void OnMessageDeleted(UIView& item) override;
+    void OnExitAppMessages(UIView& item) override;
 
     void UIKitNotificationPanelTestBasic001();
     void UIKitNotificationPanelTestAnimation002();
@@ -78,6 +79,7 @@ public:
     void UIKitNotificationPanelTestSwipeGesture005();
     void UIKitNotificationPanelTestColorSettings006();
     void UIKitNotificationPanelTestIconSettings007();
+    void UIKitNotificationPanelTestAppExpansion008();
 
 private:
     void SetUpButton(UILabelButton* btn, const char* title, const char* id);
@@ -93,6 +95,7 @@ private:
     UIViewGroup* watchFaceContainer_ = nullptr; // 表盘容器
     UIView* watchFaceBackground_ = nullptr;     // 表盘背景
     UINotificationPanel* notificationPanel_ = nullptr;
+    INotificationDataProvider* dataProvider_ = nullptr;
 
     // Control buttons
     UILabelButton* showBtn_ = nullptr;

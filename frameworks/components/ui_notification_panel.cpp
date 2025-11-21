@@ -44,17 +44,18 @@ UINotificationPanel::UINotificationPanel()
       messageList_(nullptr),
       headerView_(nullptr),
       handleView_(nullptr),
-      titleLabel_(nullptr),
       emptyView_(nullptr),
       emptyIconView_(nullptr),
       emptyLabel_(nullptr),
       externalMessageListener_(nullptr),
-      isInitialized_(false)
+      isInitialized_(false),
+      dataProvider_(nullptr)
 {
     SetPanelDirection(static_cast<int16_t>(PanelDirection::BOTTOM_TO_TOP));
     Resize(DEFAULT_PANEL_WIDTH, DEFAULT_PANEL_HEIGHT);
 
     messageAdapter_.SetMessageListener(this);
+    messageAdapter_.SetMode(MessageAdapter::GROUP_SUMMARY);
 
     if (!InitializeComponents()) {
         GRAPHIC_LOGE("UINotificationPanel initialization failed");
@@ -133,7 +134,6 @@ void UINotificationPanel::CleanupComponents()
     }
 
     handleView_ = nullptr;
-    titleLabel_ = nullptr;
 
     if (emptyView_ != nullptr) {
         Remove(emptyView_);
@@ -160,14 +160,12 @@ bool UINotificationPanel::InitializeComponents()
         CleanupComponents();
         return false;
     }
-    // if (!CreateTitleLabel()) {
-    //     CleanupComponents();
-    //     return false;
-    // }
+
     if (!CreateMessageList()) {
         CleanupComponents();
         return false;
     }
+
     if (!CreateEmptyView()) {
         CleanupComponents();
         return false;
@@ -197,24 +195,6 @@ bool UINotificationPanel::CreateHandleView()
     return true;
 }
 
-bool UINotificationPanel::CreateTitleLabel()
-{
-    titleLabel_ = new UILabel();
-    if (titleLabel_ == nullptr) {
-        GRAPHIC_LOGE("UINotificationPanel::CreateTitleLabel failed");
-        return false;
-    }
-
-    titleLabel_->SetPosition(PADDING, HANDLE_HEIGHT + HANDLE_PADDING * 2);
-    titleLabel_->SetWidth(GetWidth() - 2 * PADDING);
-    titleLabel_->SetHeight(40);
-    titleLabel_->SetText("通知");
-    titleLabel_->SetFont(DEFAULT_VECTOR_FONT_FILENAME, 28);
-    titleLabel_->SetAlign(TEXT_ALIGNMENT_CENTER);
-    headerView_->SetHeight(HANDLE_HEIGHT + HANDLE_PADDING * 2 + titleLabel_->GetHeight());
-    headerView_->Add(titleLabel_);
-    return true;
-}
 
 bool UINotificationPanel::CreateMessageList()
 {
@@ -289,7 +269,7 @@ void UINotificationPanel::UpdateEmptyStateVisibility()
     if (!isInitialized_) {
         return;
     }
-    const uint16_t total = messageAdapter_.GetTotalMessageCount();
+    const uint16_t total = dataProvider_ ? dataProvider_->GetTotalMessageCount() : 0;
     const bool showEmpty = (total == 0);
 
     if (emptyView_ != nullptr) {
@@ -310,39 +290,36 @@ void UINotificationPanel::RefreshMessages()
         GRAPHIC_LOGE("UINotificationPanel not initialized or messageList_ is null");
         return;
     }
-
     messageList_->RefreshList();
-    messageList_->Invalidate();
     UpdateEmptyStateVisibility();
 }
 
-void UINotificationPanel::AddMessage(const MessageData& message)
+uint32_t UINotificationPanel::RemoveMessage(const char* appName, uint32_t messageId)
 {
-    messageAdapter_.AddMessage(message);
-    RefreshMessages();
+    if (dataProvider_ == nullptr) {
+        GRAPHIC_LOGE("UINotificationPanel::%s dataProvider_ is null", __func__);
+        return 0;
+    }
+    return dataProvider_->RemoveMessageById(appName, messageId);
 }
 
-void UINotificationPanel::RemoveMessage(uint32_t messageId)
+void UINotificationPanel::RemoveAppMessages(const char* appName)
 {
-    messageAdapter_.RemoveMessageById(messageId);
-    RefreshMessages();
-}
-
-void UINotificationPanel::ClearAllMessages()
-{
-    messageAdapter_.ClearAllGroupData();
-    RefreshMessages();
-}
-
-uint16_t UINotificationPanel::GetMessageCount()
-{
-    return messageAdapter_.GetTotalMessageCount();
+    if (dataProvider_ == nullptr) {
+        GRAPHIC_LOGE("UINotificationPanel::%s dataProvider_ is null", __func__);
+        return;
+    }
+    dataProvider_->RemoveMessagesByAppName(appName);
 }
 
 void UINotificationPanel::OnMessageClicked(UIView& item)
 {
-    __attribute__((unused)) UINotificationItem& itemRef = static_cast<UINotificationItem&>(item);
-    GRAPHIC_LOGI("UINotificationPanel::OnMessageClicked messageId=%u", itemRef.GetMessageId());
+    UINotificationItem& itemRef = static_cast<UINotificationItem&>(item);
+    const char* appName = itemRef.GetAppName();
+    if (appName != nullptr && strlen(appName) > 0) {
+        GRAPHIC_LOGI("UINotificationPanel::OnMessageClicked appName=%s, messageId=%u", appName, itemRef.GetMessageId());
+        ShowAppMessageList(appName);
+    }
 
     if (externalMessageListener_ != nullptr) {
         externalMessageListener_->OnMessageClicked(item);
@@ -351,13 +328,61 @@ void UINotificationPanel::OnMessageClicked(UIView& item)
 
 void UINotificationPanel::OnMessageDeleted(UIView& item)
 {
+    UINotificationItem& itemRef = static_cast<UINotificationItem&>(item);
+    GRAPHIC_LOGI("UINotificationPanel::%s messageId=%u", __func__, itemRef.GetMessageId());
+    if (messageAdapter_.GetMode() == MessageAdapter::GROUP_SUMMARY) {
+        RemoveAppMessages(itemRef.GetAppName());
+    }
+    else {
+        if (RemoveMessage(itemRef.GetAppName(), itemRef.GetMessageId()) == 0) {
+            messageAdapter_.SetMode(MessageAdapter::GROUP_SUMMARY);
+        }
+    }
+    RefreshMessages();
+
     if (externalMessageListener_ != nullptr) {
         externalMessageListener_->OnMessageDeleted(item);
     }
+}
 
-    UINotificationItem& itemRef = static_cast<UINotificationItem&>(item);
-    GRAPHIC_LOGI("UINotificationPanel::OnMessageDeleted messageId=%u", itemRef.GetMessageId());
-    RemoveMessage(itemRef.GetMessageId());
+void UINotificationPanel::OnExitAppMessages(UIView& item)
+{
+    ShowMainMessageList();
+}
+
+void UINotificationPanel::OnClearMessages()
+{
+    if (dataProvider_ == nullptr) {
+        return;
+    }
+    if (messageAdapter_.GetMode() == MessageAdapter::GROUP_SUMMARY) {
+        dataProvider_->ClearAll();
+    } else {
+        RemoveAppMessages(messageAdapter_.GetAppName());
+        messageAdapter_.SetMode(MessageAdapter::GROUP_SUMMARY);
+    }
+    RefreshMessages();
+}
+
+void UINotificationPanel::ShowAppMessageList(const char* appName)
+{
+    if (appName == nullptr || strlen(appName) == 0) {
+        return;
+    }
+
+    messageAdapter_.SetAppName(appName);
+    messageAdapter_.SetMode(MessageAdapter::APP_DETAIL);
+    if (messageList_ != nullptr) {
+        messageList_->ScrollTo(0);
+    }
+}
+
+void UINotificationPanel::ShowMainMessageList()
+{
+    messageAdapter_.SetMode(MessageAdapter::GROUP_SUMMARY);
+    if (messageList_ != nullptr) {
+        messageList_->ScrollTo(0);
+    }
 }
 #endif
 
@@ -365,40 +390,71 @@ void UINotificationPanel::OnMessageDeleted(UIView& item)
 // MessageAdapter Implementation
 // ============================================================================
 #if 1 // MessageAdapter
-MessageAdapter::MessageAdapter() : groups_(), itemListener_(nullptr) {}
-
-MessageAdapter::~MessageAdapter()
+MessageAdapter::MessageAdapter() : itemListener_(nullptr), dataProvider_(nullptr), mode_(GROUP_SUMMARY)
 {
-    ClearAllGroupData();
+    appName_[0] = '\0';
 }
+
+MessageAdapter::~MessageAdapter() {}
 
 uint16_t MessageAdapter::GetCount()
 {
-    return groups_.Size();
+    uint16_t count = GetOriginCount();
+    return count ? count + 1 : 0;
+}
+
+uint16_t MessageAdapter::GetOriginCount()
+{
+    if (dataProvider_ == nullptr) {
+        return 0;
+    }
+    if (mode_ == GROUP_SUMMARY) {
+        return dataProvider_->GetAppCount();
+    }
+    return dataProvider_->GetMessagesCountByAppName(appName_);
 }
 
 UIView* MessageAdapter::GetView(UIView* inView, int16_t index)
 {
-    const uint16_t count = GetCount();
-    if (index < 0 || static_cast<uint16_t>(index) >= count) {
-        GRAPHIC_LOGE("MessageAdapter::%s invalid index: %d, total groups: %d", __func__, index, count);
+    if (dataProvider_ == nullptr) {
         return nullptr;
     }
-
-    NotificationGroupData_t* groupData = GetGroupDataByIndex(static_cast<uint16_t>(index));
-    if (groupData == nullptr) {
-        GRAPHIC_LOGE("MessageAdapter::%s group data not found at index: %d", __func__, index);
+    int16_t count = GetOriginCount();
+    if (index < 0 || index > count) {
         return nullptr;
     }
-
-    UINotificationItem* item = CreateMessageItem(inView);
-    if (item == nullptr) {
-        GRAPHIC_LOGE("MessageAdapter::%s failed to create item", __func__);
-        return nullptr;
+    UINotificationItem* item = nullptr;
+    if (index == count) {
+        item = CreateMessageItem(inView);
+        if (item == nullptr) {
+            return nullptr;
+        }
+        item->SetAsFooter(true);
+    } else if (mode_ == GROUP_SUMMARY) {
+        List<MessageData>* messages = dataProvider_->GetMessagesByAppIndex(index);
+        if (messages == nullptr || messages->Size() == 0) {
+            return nullptr;
+        }
+        item = CreateMessageItem(inView);
+        if (item == nullptr) {
+            return nullptr;
+        }
+        item->SetAsFooter(false);
+        item->SetMessageNumber(messages->Size());
+        item->UpdateMessageItem(messages->Front());
+    } else {
+        MessageData* msgData = dataProvider_->GetAppMessageByIndex(appName_, index);
+        if (msgData == nullptr) {
+            return nullptr;
+        }
+        item = CreateMessageItem(inView);
+        if (item == nullptr) {
+            return nullptr;
+        }
+        item->SetAsFooter(false);
+        item->SetMessageNumber(1);
+        item->UpdateMessageItem(*msgData);
     }
-
-    item->SetMessageNumber(groupData->messages.Size());
-    item->UpdateMessageItem(groupData->messages.Front());
     item->LayoutChildViews();
     return item;
 }
@@ -409,14 +465,12 @@ UINotificationItem* MessageAdapter::CreateMessageItem(UIView* inView)
 
     if (inView != nullptr) {
         item = static_cast<UINotificationItem*>(inView);
-        GRAPHIC_LOGI("MessageAdapter::%s use existing item", __func__);
     } else {
         item = new UINotificationItem();
         if (item == nullptr) {
             GRAPHIC_LOGE("MessageAdapter::%s failed to allocate memory", __func__);
             return nullptr;
         }
-        GRAPHIC_LOGI("MessageAdapter::%s create new item", __func__);
     }
 
     if (itemListener_ != nullptr) {
@@ -425,140 +479,13 @@ UINotificationItem* MessageAdapter::CreateMessageItem(UIView* inView)
     return item;
 }
 
-void MessageAdapter::SetData(List<MessageData>* messages)
+void MessageAdapter::DeleteView(UIView*& view)
 {
-    if (messages == nullptr) {
-        GRAPHIC_LOGE("MessageAdapter::SetData messages is null");
+    if (view == nullptr) {
         return;
     }
-
-    ClearAllGroupData();
-
-    ListNode<MessageData>* node = messages->Begin();
-    while (node != messages->End()) {
-        AddMessage(node->data_);
-        node = messages->Next(node);
-    }
-}
-
-void MessageAdapter::AddMessage(const MessageData& message)
-{
-    GRAPHIC_LOGI("MessageAdapter::AddMessage messageId=%u", message.messageId);
-    NotificationGroupData_t* group = FindOrCreateGroupData(message.appName, message.iconPath);
-    if (group == nullptr) {
-        GRAPHIC_LOGE("MessageAdapter::%s FindOrCreateGroupData failed", __func__);
-        return;
-    }
-    group->messages.PushFront(message);
-}
-
-void MessageAdapter::RemoveMessageById(uint32_t messageId)
-{
-    ListNode<NotificationGroupData_t*>* groupNode = groups_.Begin();
-    const ListNode<NotificationGroupData_t*>* end = groups_.End();
-    while (groupNode != end) {
-        NotificationGroupData_t* group = groupNode->data_;
-        if (group != nullptr) {
-            ListNode<MessageData>* msgNode = group->messages.Begin();
-            const ListNode<MessageData>* msgEnd = group->messages.End();
-            while (msgNode != msgEnd) {
-                if (msgNode->data_.messageId == messageId) {
-                    group->messages.Remove(msgNode);
-                    RemoveEmptyGroups();
-                    return;
-                }
-                msgNode = group->messages.Next(msgNode);
-            }
-        }
-        groupNode = groups_.Next(groupNode);
-    }
-}
-
-void MessageAdapter::ClearAllGroupData()
-{
-    ListNode<NotificationGroupData_t*>* node = groups_.Begin();
-    const ListNode<NotificationGroupData_t*>* end = groups_.End();
-    while (node != end) {
-        NotificationGroupData_t* group = node->data_;
-        if (group != nullptr) {
-            delete group;
-        }
-        node = groups_.Next(node);
-    }
-    groups_.Clear();
-}
-
-MessageAdapter::NotificationGroupData_t* MessageAdapter::FindOrCreateGroupData(const char* appName,
-                                                                               const char* appIconPath)
-{
-    if (appName == nullptr) {
-        GRAPHIC_LOGE("MessageAdapter::%s appName is null", __func__);
-        return nullptr;
-    }
-
-    ListNode<NotificationGroupData_t*>* node = groups_.Begin();
-    const ListNode<NotificationGroupData_t*>* end = groups_.End();
-    while (node != end) {
-        NotificationGroupData_t* data = node->data_;
-        if (data != nullptr && strcmp(data->appName, appName) == 0) {
-            return data;
-        }
-        node = groups_.Next(node);
-    }
-
-    NotificationGroupData_t* newData = new NotificationGroupData_t();
-    if (newData == nullptr) {
-        GRAPHIC_LOGE("MessageAdapter::%s failed to allocate group data", __func__);
-        return nullptr;
-    }
-    // 初始化分组的应用名与应用图标路径（图标路径仅在创建时设置）
-    MessageData::SafeCopyString(newData->appName, appName, sizeof(newData->appName));
-    MessageData::SafeCopyString(newData->appIconPath, appIconPath, sizeof(newData->appIconPath));
-    groups_.PushFront(newData);
-    return newData;
-}
-
-void MessageAdapter::RemoveEmptyGroups()
-{
-    ListNode<NotificationGroupData_t*>* node = groups_.Begin();
-    while (node != groups_.End()) {
-        NotificationGroupData_t* group = node->data_;
-        if (group != nullptr && group->messages.Size() == 0) {
-            ListNode<NotificationGroupData_t*>* nextNode = groups_.Next(node);
-            delete group;
-            groups_.Remove(node);
-            node = nextNode;
-        } else {
-            node = groups_.Next(node);
-        }
-    }
-}
-
-MessageAdapter::NotificationGroupData_t* MessageAdapter::GetGroupDataByIndex(uint16_t index)
-{
-    ListNode<NotificationGroupData_t*>* node = groups_.Begin();
-    for (uint16_t i = 0; i < index && node != groups_.End(); ++i) {
-        node = groups_.Next(node);
-    }
-    if (node == nullptr || node == groups_.End()) {
-        return nullptr;
-    }
-    return node->data_;
-}
-
-uint16_t MessageAdapter::GetTotalMessageCount() const
-{
-    uint16_t total = 0;
-    ListNode<NotificationGroupData_t*>* node = const_cast<List<NotificationGroupData_t*>&>(groups_).Begin();
-    const ListNode<NotificationGroupData_t*>* end = const_cast<List<NotificationGroupData_t*>&>(groups_).End();
-    while (node != end) {
-        NotificationGroupData_t* group = node->data_;
-        if (group != nullptr) {
-            total += group->messages.Size();
-        }
-        node = const_cast<List<NotificationGroupData_t*>&>(groups_).Next(node);
-    }
-    return total;
+    delete view;
+    view = nullptr;
 }
 #endif
 
@@ -760,9 +687,6 @@ bool UINotificationItem::CreateChildViews()
 {
     clearButton_ = new UILabelButton();
     if (clearButton_ != nullptr) {
-        clearButton_->SetText("删除");
-        clearButton_->SetStyle(STYLE_BACKGROUND_COLOR, Color::Red().full);
-        clearButton_->SetStyle(STYLE_TEXT_COLOR, Color::White().full);
         clearButton_->SetOnClickListener(this);
         Add(clearButton_);
     }
@@ -798,22 +722,44 @@ void UINotificationItem::LayoutChildViews()
 
     const int16_t itemWidth = DEFAULT_ITEM_WIDTH;
     const int16_t itemHeight = DEFAULT_ITEM_HEIGHT;
+
+    if (isFooter_) {
+        int16_t footerHeight = 60;
+        Resize(itemWidth, footerHeight);
+        messageStackView_->SetVisible(false);
+        int16_t btnW = 280;
+        int16_t btnH = 56;
+        int16_t btnX = (itemWidth - btnW) / 2;
+        int16_t btnY = (footerHeight - btnH) / 2;
+        clearButton_->SetPosition(btnX, btnY, btnW, btnH);
+        clearButton_->SetStyle(STYLE_MARGIN_TOP, 0);
+        clearButton_->SetStyle(STYLE_MARGIN_LEFT, 0);
+        clearButton_->SetStyle(STYLE_BACKGROUND_COLOR, Color::GetColorFromRGB(0x33, 0x99, 0xFF).full);
+        clearButton_->SetStyle(STYLE_TEXT_COLOR, Color::White().full);
+        clearButton_->SetStyle(STYLE_BORDER_RADIUS, btnH/2);
+        clearButton_->SetText("清除消息");
+        clearButton_->SetVisible(true);
+        return;
+    }
+
     Resize(itemWidth, itemHeight);
 
-    // 消息内容视图布局
     messageStackView_->SetStyle(STYLE_MARGIN_LEFT, ITEM_MARGIN_LEFT);
-    messageStackView_->SetPosition(0, 0, itemWidth-2*ITEM_MARGIN_LEFT, itemHeight);
+    messageStackView_->SetPosition(0, 0, itemWidth - 2 * ITEM_MARGIN_LEFT, itemHeight);
     messageStackView_->SetOffsetAndInset(STACK_HINT_OFFSET_Y, STACK_HINT_INSET);
     messageStackView_->SetStyle(STYLE_BACKGROUND_OPA, OPA_TRANSPARENT);
+    messageStackView_->SetVisible(true);
     messageStackView_->LayoutStack();
 
-    // 清除按钮布局（初始在右侧可视区域外）
     int16_t btnY = (itemHeight - CLEAR_BUTTON_WIDTH) / 2;
     int16_t btnX = messageStackView_->GetWidthWithMargin() - itemHeight;
+    clearButton_->SetText("删除");
+    clearButton_->SetStyle(STYLE_BACKGROUND_COLOR, Color::Red().full);
+    clearButton_->SetStyle(STYLE_TEXT_COLOR, Color::White().full);
     clearButton_->SetStyle(STYLE_MARGIN_TOP, btnY);
     clearButton_->SetStyle(STYLE_MARGIN_LEFT, btnY);
     clearButton_->SetPosition(btnX, 0, CLEAR_BUTTON_WIDTH, CLEAR_BUTTON_WIDTH);
-    clearButton_->SetStyle(STYLE_BORDER_RADIUS, CLEAR_BUTTON_WIDTH/2.0);
+    clearButton_->SetStyle(STYLE_BORDER_RADIUS, CLEAR_BUTTON_WIDTH / 2.0);
     clearButton_->SetVisible(false);
 }
 
@@ -821,7 +767,7 @@ void UINotificationItem::UpdateMessageItem(const MessageData& data)
 {
     SetMessageId(data.messageId);
     SetAppName(data.appName);
-    if (messageStackView_ != nullptr) {
+    if (messageStackView_ != nullptr && !isFooter_) {
         messageStackView_->UpdateContent(data, messageNumber_);
     }
 }
@@ -861,7 +807,7 @@ void UINotificationItem::UpdateChildPosition(int16_t offsetX)
 
 void UINotificationItem::SetChildPosition(int16_t x)
 {
-    if (messageStackView_ == nullptr || clearButton_ == nullptr) {
+    if (messageStackView_ == nullptr || clearButton_ == nullptr || isFooter_) {
         return;
     }
 
@@ -903,6 +849,10 @@ uint8_t UINotificationItem::GetParentListDirection(UIView* view)
 
 bool UINotificationItem::OnDragStartEvent(const DragEvent& event)
 {
+    if (isFooter_) {
+        needConsumeEvent_ = false;
+        return false;
+    }
     const uint8_t dragDir = event.GetDragDirection();
     const uint8_t listDir = GetParentListDirection(this);
 
@@ -947,6 +897,12 @@ bool UINotificationItem::OnDragEndEvent(const DragEvent& event)
         } else if (currentX <= -threshold) {
             currentAnimationState_ = CONTENT_SHOW_IN_BUTTON_LEFT;
             StartAutoCompleteAnimationTo(-h);
+        } else if (currentX >= threshold) {
+            if (itemListener_ != nullptr) {
+                itemListener_->OnExitAppMessages(*this);
+            }
+            currentAnimationState_ = CONTENT_SHOW;
+            StartAutoCompleteAnimationTo(0);
         } else {
             currentAnimationState_ = CONTENT_SHOW;
             StartAutoCompleteAnimationTo(0);
@@ -959,7 +915,11 @@ bool UINotificationItem::OnDragEndEvent(const DragEvent& event)
 bool UINotificationItem::OnClick(UIView& view, const ClickEvent& event)
 {
     if (&view == clearButton_ && itemListener_ != nullptr) {
-        itemListener_->OnMessageDeleted(*this);
+        if (isFooter_) {
+            itemListener_->OnClearMessages();
+        } else {
+            itemListener_->OnMessageDeleted(*this);
+        }
         return true;
     }
     return false;
@@ -1046,6 +1006,11 @@ void UINotificationItem::StopAnimation()
     if (GetState() != Animator::STOP) {
         Stop();
     }
+}
+
+void UINotificationItem::SetAsFooter(bool isFooter)
+{
+    isFooter_ = isFooter;
 }
 #endif
 
