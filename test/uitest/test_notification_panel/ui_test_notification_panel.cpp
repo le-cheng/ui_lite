@@ -886,7 +886,7 @@ void UITestNotificationPanel::CreateWatchFace()
     notificationPanel_->SetDataProvider(dataProvider_);
 
     // 添加一些测试消息
-    for (int i = 0; i < 8; ++i) {
+    for (int i = 0; i < 80; ++i) {
         AddTestMessage();
     }
     notificationPanel_->RefreshMessages();

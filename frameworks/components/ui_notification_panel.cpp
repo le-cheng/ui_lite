@@ -290,6 +290,7 @@ void UINotificationPanel::RefreshMessages()
         GRAPHIC_LOGE("UINotificationPanel not initialized or messageList_ is null");
         return;
     }
+    
     messageList_->RefreshList();
     UpdateEmptyStateVisibility();
 }
@@ -316,8 +317,7 @@ void UINotificationPanel::OnMessageClicked(UIView& item)
 {
     UINotificationItem& itemRef = static_cast<UINotificationItem&>(item);
     const char* appName = itemRef.GetAppName();
-    if (appName != nullptr && strlen(appName) > 0) {
-        GRAPHIC_LOGI("UINotificationPanel::OnMessageClicked appName=%s, messageId=%u", appName, itemRef.GetMessageId());
+    if (messageAdapter_.GetMode() == MessageAdapter::GROUP_SUMMARY) {
         ShowAppMessageList(appName);
     }
 
@@ -347,7 +347,9 @@ void UINotificationPanel::OnMessageDeleted(UIView& item)
 
 void UINotificationPanel::OnExitAppMessages(UIView& item)
 {
-    ShowMainMessageList();
+    if (messageAdapter_.GetMode() == MessageAdapter::APP_DETAIL) {
+        ShowMainMessageList();
+    }
 }
 
 void UINotificationPanel::OnClearMessages()
@@ -659,7 +661,7 @@ UINotificationItem::UINotificationItem()
       targetPositionX_(0),
       startPositionX_(0),
       currentAnimationState_(CONTENT_SHOW),
-      dragDirection_(UIList::HORIZONTAL),
+      dragDirection_(UIList6::HORIZONTAL),
       needConsumeEvent_(true)
 {
     appName_[0] = '\0';
@@ -739,6 +741,7 @@ void UINotificationItem::LayoutChildViews()
         clearButton_->SetStyle(STYLE_BORDER_RADIUS, btnH/2);
         clearButton_->SetText("清除消息");
         clearButton_->SetVisible(true);
+        clearButton_->ResetTransParameter();
         return;
     }
 
@@ -839,12 +842,12 @@ uint8_t UINotificationItem::GetParentListDirection(UIView* view)
     UIView* parent = view ? view->GetParent() : nullptr;
     while (parent) {
         if (parent->GetViewType() == UI_LIST) {
-            UIList* list = reinterpret_cast<UIList*>(parent);
+            UIList6* list = reinterpret_cast<UIList6*>(parent);
             return list->GetDirection();
         }
         parent = parent->GetParent();
     }
-    return UIList::VERTICAL;
+    return UIList6::VERTICAL;
 }
 
 bool UINotificationItem::OnDragStartEvent(const DragEvent& event)
@@ -857,9 +860,9 @@ bool UINotificationItem::OnDragStartEvent(const DragEvent& event)
     const uint8_t listDir = GetParentListDirection(this);
 
     if (dragDir == DragEvent::DIRECTION_LEFT_TO_RIGHT || dragDir == DragEvent::DIRECTION_RIGHT_TO_LEFT) {
-        dragDirection_ = UIList::HORIZONTAL;
+        dragDirection_ = UIList6::HORIZONTAL;
     } else if (dragDir == DragEvent::DIRECTION_TOP_TO_BOTTOM || dragDir == DragEvent::DIRECTION_BOTTOM_TO_TOP) {
-        dragDirection_ = UIList::VERTICAL;
+        dragDirection_ = UIList6::VERTICAL;
     }
 
     StopAnimation();
@@ -873,7 +876,7 @@ bool UINotificationItem::OnDragEvent(const DragEvent& event)
         return false;
     }
 
-    if (dragDirection_ == UIList::HORIZONTAL) {
+    if (dragDirection_ == UIList6::HORIZONTAL) {
         UpdateChildPosition(event.GetDeltaX());
     }
     return true;
@@ -885,7 +888,7 @@ bool UINotificationItem::OnDragEndEvent(const DragEvent& event)
         return false;
     }
 
-    if (dragDirection_ == UIList::HORIZONTAL && messageStackView_ != nullptr) {
+    if (dragDirection_ == UIList6::HORIZONTAL && messageStackView_ != nullptr) {
         const int16_t currentX = messageStackView_->GetX();
         const int16_t h = messageStackView_->GetHeight();
         const int16_t itemWidth = messageStackView_->GetWidthWithMargin();
@@ -914,7 +917,8 @@ bool UINotificationItem::OnDragEndEvent(const DragEvent& event)
 
 bool UINotificationItem::OnClick(UIView& view, const ClickEvent& event)
 {
-    if (&view == clearButton_ && itemListener_ != nullptr) {
+    GRAPHIC_LOGI("UINotificationItem::OnClick view=%p", &view);
+    if (itemListener_ != nullptr) {
         if (isFooter_) {
             itemListener_->OnClearMessages();
         } else {
@@ -927,7 +931,7 @@ bool UINotificationItem::OnClick(UIView& view, const ClickEvent& event)
 
 bool UINotificationItem::OnClickEvent(const ClickEvent& event)
 {
-    if (itemListener_ != nullptr) {
+    if (itemListener_ != nullptr && !isFooter_) {
         itemListener_->OnMessageClicked(*this);
         return true;
     }
@@ -980,6 +984,7 @@ void UINotificationItem::OnStop(UIView& view)
 
     switch (currentAnimationState_) {
         case CONTENT_HIDDEN:
+            clearButton_->SetVisible(false);
             if (messageStackView_ != nullptr) {
                 const int16_t x = messageStackView_->GetX();
                 const int16_t width = messageStackView_->GetWidthWithMargin();
@@ -988,7 +993,6 @@ void UINotificationItem::OnStop(UIView& view)
                     itemListener_->OnMessageDeleted(*this);
                 }
             }
-            clearButton_->SetVisible(false);
             break;
         case CONTENT_SHOW_IN_BUTTON_LEFT:
             clearButton_->SetVisible(true);
@@ -1112,7 +1116,7 @@ void UICircleList::SetFadeZoneRatio(float ratio)
 
 void UICircleList::MoveChildByOffset(int16_t xOffset, int16_t yOffset)
 {
-    UIList::MoveChildByOffset(xOffset, yOffset);
+    UIList6::MoveChildByOffset(xOffset, yOffset);
 
     UIView* view = GetChildrenHead();
     while (view != nullptr) {
@@ -1126,7 +1130,7 @@ void UICircleList::PushBack(UIView* view)
     if (view == nullptr) {
         return;
     }
-    UIList::PushBack(view);
+    UIList6::PushBack(view);
     ApplyCircularTransform(view);
 }
 

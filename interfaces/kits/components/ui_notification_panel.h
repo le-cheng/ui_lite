@@ -14,7 +14,7 @@
 #define GRAPHIC_LITE_UI_NOTIFICATION_PANEL_H
 
 #include "components/ui_base_panel.h"
-#include "components/ui_list.h"
+#include "components/ui_list6.h"
 #include "components/ui_label.h"
 #include "components/ui_label_button.h"
 #include "components/ui_image_view.h"
@@ -149,9 +149,9 @@ private:
     UIView* stackHintView_ = nullptr;
 };
 
-class UICircleList : public UIList {
+class UICircleList : public UIList6 {
 public:
-    explicit UICircleList(uint8_t direction = VERTICAL) : UIList(direction){}
+    explicit UICircleList(uint8_t direction = VERTICAL) : UIList6(direction){}
 
     ~UICircleList(){}
 

@@ -24,7 +24,7 @@
  */
 
 /**
- * @file ui_list.h
+ * @file ui_list6.h
  *
  * @brief Declares a scrollable list in the vertical or horizontal direction. * This scrollable list can be used with
  *        the adapter {@link AbstractAdapter} to implement scrolling, inertial scrolling, automatic alignment, and
@@ -35,8 +35,8 @@
  * @version 1.0
  */
 
-#ifndef GRAPHIC_LITE_UI_LIST_H
-#define GRAPHIC_LITE_UI_LIST_H
+#ifndef GRAPHIC_LITE_UI_LIST6_H
+#define GRAPHIC_LITE_UI_LIST6_H
 
 #include "components/abstract_adapter.h"
 #include "components/ui_abstract_scroll.h"
@@ -52,22 +52,22 @@ namespace OHOS {
  * @since 1.0
  * @version 1.0
  */
-class ListScrollListener : public HeapBase {
+class ListScrollListener6 : public HeapBase {
 public:
     /**
-     * @brief A constructor used to create a <b>ListScrollListener</b> instance with the default state
+     * @brief A constructor used to create a <b>ListScrollListener6</b> instance with the default state
      *        {@link SCROLL_STATE_STOP}.
      * @since 1.0
      * @version 1.0
      */
-    ListScrollListener() : state_(SCROLL_STATE_STOP) {}
+    ListScrollListener6() : state_(SCROLL_STATE_STOP) {}
 
     /**
-     * @brief A destructor used to delete the <b>ListScrollListener</b> instance.
+     * @brief A destructor used to delete the <b>ListScrollListener6</b> instance.
      * @since 1.0
      * @version 1.0
      */
-    virtual ~ListScrollListener() {}
+    virtual ~ListScrollListener6() {}
 
     /**
      * @brief Called when a scroll starts.
@@ -154,7 +154,7 @@ public:
     static constexpr uint8_t SCROLL_STATE_MOVE = 1;
 
 private:
-    friend class UIList;
+    friend class UIList6;
     uint8_t state_;
 };
 
@@ -164,37 +164,37 @@ private:
  *        preset position as this list scrolls.
  *
  * You need to override {@link AbstractAdapter} to implement functions for setting and saving data, obtaining data
- * quantity, and creating child views. <b>UIList</b> is used when there is a large number of child views with a fixed
+ * quantity, and creating child views. <b>UIList6</b> is used when there is a large number of child views with a fixed
  * format. This list automatically reclaims the child views removed out of the current view as it scrolls so that as
  * many as child views can be displayed with a lower memory consumption.
  *
  * @since 1.0
  * @version 1.0
  */
-class UIList : public UIAbstractScroll {
+class UIList6 : public UIAbstractScroll {
 public:
     /**
-     * @brief A constructor used to create a <b>UIList</b> instance in the vertical direction.
+     * @brief A constructor used to create a <b>UIList6</b> instance in the vertical direction.
      * @since 1.0
      * @version 1.0
      */
-    UIList();
+    UIList6();
 
     /**
-     * @brief A constructor used to create a <b>UIList</b> instance in the specified direction.
+     * @brief A constructor used to create a <b>UIList6</b> instance in the specified direction.
      *
-     * @param direction Indicates the <b>UIList</b> direction, either {@link HORIZONTAL} or {@link VERTICAL}.
+     * @param direction Indicates the <b>UIList6</b> direction, either {@link HORIZONTAL} or {@link VERTICAL}.
      * @since 1.0
      * @version 1.0
      */
-    explicit UIList(uint8_t direction);
+    explicit UIList6(uint8_t direction);
 
     /**
-     * @brief A destructor used to delete the <b>UIList</b> instance.
+     * @brief A destructor used to delete the <b>UIList6</b> instance.
      * @since 1.0
      * @version 1.0
      */
-    virtual ~UIList();
+    virtual ~UIList6();
 
     /**
      * @brief Obtains the view type.
@@ -309,7 +309,7 @@ public:
     /**
      * @brief Sets the position where a child view is selected as this list scrolls.
      *
-     * When a child view is selected at the specified position, the callback {@link ListScrollListener} is invoked.
+     * When a child view is selected at the specified position, the callback {@link ListScrollListener6} is invoked.
      * You can implement the zoom-in and color-change effects in the callback.
      *
      * @param position Indicates the position to set. The default value is <b>0</b>, indicating that no position is
@@ -340,7 +340,7 @@ public:
      * @since 1.0
      * @version 1.0
      */
-    void SetScrollStateListener(ListScrollListener* scrollListener)
+    void SetScrollStateListener(ListScrollListener6* scrollListener)
     {
         scrollListener_ = scrollListener;
     }
@@ -433,7 +433,7 @@ private:
     friend class Recycle;
     class Recycle : public HeapBase {
     public:
-        explicit Recycle(UIList* list) : adapter_(nullptr), listView_(list), hasInitialiszed_(false) {}
+        explicit Recycle(UIList6* list) : adapter_(nullptr), listView_(list), hasInitialiszed_(false) {}
         virtual ~Recycle();
         void InitRecycle();
         UIView* GetView(int16_t index);
@@ -468,12 +468,12 @@ private:
         void MeasureAdapterRelativeRect();
 
     private:
-        friend class UIList;
+        friend class UIList6;
         void FillActiveView();
 
         List<UIView*> scrapView_;
         AbstractAdapter* adapter_;
-        UIList* listView_;
+        UIList6* listView_;
         Rect32 adapterRelativeRect_;
         bool hasInitialiszed_;
     };
@@ -505,7 +505,7 @@ private:
     uint16_t selectPosition_;
     int16_t onSelectedIndex_;
     Recycle recycle_;
-    ListScrollListener* scrollListener_;
+    ListScrollListener6* scrollListener_;
 };
 } // namespace OHOS
 #endif // GRAPHIC_LITE_UI_LIST_H

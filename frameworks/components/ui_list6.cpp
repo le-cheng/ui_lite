@@ -13,13 +13,13 @@
  * limitations under the License.
  */
 
-#include "components/ui_list.h"
+#include "components/ui_list6.h"
 
 #include "components/ui_abstract_scroll_bar.h"
 #include "gfx_utils/graphic_log.h"
 
 namespace OHOS {
-UIList::Recycle::~Recycle()
+UIList6::Recycle::~Recycle()
 {
     ListNode<UIView*>* node = scrapView_.Begin();
     while (node != scrapView_.End()) {
@@ -36,7 +36,7 @@ UIList::Recycle::~Recycle()
     scrapView_.Clear();
 }
 
-void UIList::Recycle::MeasureAdapterRelativeRect()
+void UIList6::Recycle::MeasureAdapterRelativeRect()
 {
     uint16_t i = 0;
     if (listView_ == nullptr) {
@@ -70,7 +70,7 @@ void UIList::Recycle::MeasureAdapterRelativeRect()
     }
 }
 
-void UIList::Recycle::InitRecycle()
+void UIList6::Recycle::InitRecycle()
 {
     if ((adapter_ == nullptr) || (listView_ == nullptr)) {
         return;
@@ -83,7 +83,7 @@ void UIList::Recycle::InitRecycle()
     }
 }
 
-UIView* UIList::Recycle::GetView(int16_t index)
+UIView* UIList6::Recycle::GetView(int16_t index)
 {
     if (adapter_ == nullptr) {
         return nullptr;
@@ -103,10 +103,10 @@ UIView* UIList::Recycle::GetView(int16_t index)
     return retView;
 }
 
-void UIList::Recycle::FillActiveView()
+void UIList6::Recycle::FillActiveView()
 {
     uint16_t index = listView_->GetStartIndex();
-    if (listView_->GetDirection() == UIList::VERTICAL) {
+    if (listView_->GetDirection() == UIList6::VERTICAL) {
         int16_t childBottom = 0;
         while ((index < adapter_->GetCount()) && (childBottom < listView_->GetHeight())) {
             UIView* view = GetView(index);
@@ -137,20 +137,20 @@ void UIList::Recycle::FillActiveView()
     }
 }
 
-Rect32 UIList::Recycle::GetAdapterItemsReletiveRect()
+Rect32 UIList6::Recycle::GetAdapterItemsReletiveRect()
 {
     return adapterRelativeRect_;
 }
 
-void UIList::Recycle::MoveAdapterItemsRelativeRect(int16_t x, int16_t y)
+void UIList6::Recycle::MoveAdapterItemsRelativeRect(int16_t x, int16_t y)
 {
     auto& rect = adapterRelativeRect_;
     rect.SetPosition(rect.GetX() + x, rect.GetY() + y);
 }
 
-UIList::UIList() : UIList(VERTICAL) {}
+UIList6::UIList6() : UIList6(VERTICAL) {}
 
-UIList::UIList(uint8_t direction)
+UIList6::UIList6(uint8_t direction)
     : onSelectedView_(nullptr),
       isLoopList_(false),
       isReCalculateDragEnd_(true),
@@ -178,7 +178,7 @@ UIList::UIList(uint8_t direction)
     dragParentInstead_ = false;
 }
 
-UIList::~UIList()
+UIList6::~UIList6()
 {
     UIView* view = GetChildrenHead();
     while (view != nullptr) {
@@ -189,7 +189,7 @@ UIList::~UIList()
     }
 }
 
-bool UIList::OnDragEvent(const DragEvent& event)
+bool UIList6::OnDragEvent(const DragEvent& event)
 {
     if (scrollAnimator_.GetState() != Animator::STOP) {
         UIAbstractScroll::StopAnimator();
@@ -207,7 +207,7 @@ bool UIList::OnDragEvent(const DragEvent& event)
     return UIView::OnDragEvent(event);
 }
 
-bool UIList::OnDragEndEvent(const DragEvent& event)
+bool UIList6::OnDragEndEvent(const DragEvent& event)
 {
     Point last = event.GetPreLastPoint();
     Point current = event.GetLastPoint();
@@ -217,48 +217,48 @@ bool UIList::OnDragEndEvent(const DragEvent& event)
     }
     isReCalculateDragEnd_ = false;
     if (!DragThrowAnimator(current, last, event.GetDragDirection(), dragBack_)) {
-        if (scrollListener_ && (scrollListener_->GetScrollState() == ListScrollListener::SCROLL_STATE_MOVE)) {
-            scrollListener_->SetScrollState(ListScrollListener::SCROLL_STATE_STOP);
+        if (scrollListener_ && (scrollListener_->GetScrollState() == ListScrollListener6::SCROLL_STATE_MOVE)) {
+            scrollListener_->SetScrollState(ListScrollListener6::SCROLL_STATE_STOP);
             scrollListener_->OnScrollEnd(onSelectedIndex_, onSelectedView_);
         }
     }
     return UIView::OnDragEndEvent(event);
 }
 
-bool UIList::OnPressEvent(const PressEvent& event)
+bool UIList6::OnPressEvent(const PressEvent& event)
 {
     StopAnimator();
     return UIView::OnPressEvent(event);
 }
 
 #if ENABLE_ROTATE_INPUT
-bool UIList::OnRotateStartEvent(const RotateEvent& event)
+bool UIList6::OnRotateStartEvent(const RotateEvent& event)
 {
     isReCalculateDragEnd_ = true;
     return UIAbstractScroll::OnRotateStartEvent(event);
 }
 
-bool UIList::OnRotateEndEvent(const RotateEvent& event)
+bool UIList6::OnRotateEndEvent(const RotateEvent& event)
 {
     isReCalculateDragEnd_ = false;
     return UIAbstractScroll::OnRotateEndEvent(event);
 }
 #endif
 
-void UIList::ScrollBy(int16_t distance)
+void UIList6::ScrollBy(int16_t distance)
 {
     if (direction_ == VERTICAL) {
         DragYInner(distance);
     } else {
         DragXInner(distance);
     }
-    if (scrollListener_ && (scrollListener_->GetScrollState() == ListScrollListener::SCROLL_STATE_MOVE)) {
-        scrollListener_->SetScrollState(ListScrollListener::SCROLL_STATE_STOP);
+    if (scrollListener_ && (scrollListener_->GetScrollState() == ListScrollListener6::SCROLL_STATE_MOVE)) {
+        scrollListener_->SetScrollState(ListScrollListener6::SCROLL_STATE_STOP);
         scrollListener_->OnScrollEnd(onSelectedIndex_, onSelectedView_);
     }
 }
 
-bool UIList::DragXInner(int16_t distance)
+bool UIList6::DragXInner(int16_t distance)
 {
     if (IsNeedReCalculateDragEnd()) {
         return false;
@@ -298,7 +298,7 @@ bool UIList::DragXInner(int16_t distance)
     return MoveOffset(distance, 0);
 }
 
-bool UIList::DragYInner(int16_t distance)
+bool UIList6::DragYInner(int16_t distance)
 {
     if (IsNeedReCalculateDragEnd()) {
         return false;
@@ -338,7 +338,7 @@ bool UIList::DragYInner(int16_t distance)
     return MoveOffset(0, distance);
 }
 
-bool UIList::MoveOffset(int16_t x, int16_t y)
+bool UIList6::MoveOffset(int16_t x, int16_t y)
 {
     if ((x == 0) && (y == 0)) {
         return false;
@@ -349,8 +349,8 @@ bool UIList::MoveOffset(int16_t x, int16_t y)
         UpdateScrollBar();
     }
     Invalidate();
-    if (scrollListener_ && (scrollListener_->GetScrollState() == ListScrollListener::SCROLL_STATE_STOP)) {
-        scrollListener_->SetScrollState(ListScrollListener::SCROLL_STATE_MOVE);
+    if (scrollListener_ && (scrollListener_->GetScrollState() == ListScrollListener6::SCROLL_STATE_STOP)) {
+        scrollListener_->SetScrollState(ListScrollListener6::SCROLL_STATE_MOVE);
         scrollListener_->OnScrollStart(onSelectedIndex_, onSelectedView_);
     }
 
@@ -380,7 +380,7 @@ bool UIList::MoveOffset(int16_t x, int16_t y)
     return true;
 }
 
-void UIList::UpdateScrollBar()
+void UIList6::UpdateScrollBar()
 {
     auto allItemsRect = recycle_.GetAdapterItemsReletiveRect();
     float totalHeight = allItemsRect.GetHeight() + 2.0f * scrollBlankSize_; // 2: two blank spaces on both sides
@@ -395,7 +395,7 @@ void UIList::UpdateScrollBar()
     RefreshAnimator();
 }
 
-bool UIList::IsNeedReCalculateDragEnd()
+bool UIList6::IsNeedReCalculateDragEnd()
 {
     if (!autoAlign_ || isReCalculateDragEnd_ || (onSelectedView_ == nullptr)) {
         return false;
@@ -411,7 +411,7 @@ bool UIList::IsNeedReCalculateDragEnd()
     }
     return true;
 }
-bool UIList::ReCalculateDragEnd()
+bool UIList6::ReCalculateDragEnd()
 {
     if ((onSelectedView_ == nullptr) || isReCalculateDragEnd_ || !autoAlign_) {
         return false;
@@ -435,7 +435,7 @@ bool UIList::ReCalculateDragEnd()
     return true;
 }
 
-bool UIList::MoveChildStepVertical(int16_t distance)
+bool UIList6::MoveChildStepVertical(int16_t distance)
 {
     bool popRet = false;
     bool pushRet = false;
@@ -473,7 +473,7 @@ bool UIList::MoveChildStepVertical(int16_t distance)
     return (popRet || pushRet);
 }
 
-bool UIList::MoveChildStepHorizontal(int16_t distance)
+bool UIList6::MoveChildStepHorizontal(int16_t distance)
 {
     bool popRet = false;
     bool pushRet = false;
@@ -511,7 +511,7 @@ bool UIList::MoveChildStepHorizontal(int16_t distance)
     return (popRet || pushRet);
 }
 
-bool UIList::MoveChildStep(int16_t distance)
+bool UIList6::MoveChildStep(int16_t distance)
 {
     if (direction_ == VERTICAL) {
         return MoveChildStepVertical(distance);
@@ -520,13 +520,13 @@ bool UIList::MoveChildStep(int16_t distance)
     }
 }
 
-void UIList::SetAdapter(AbstractAdapter* adapter)
+void UIList6::SetAdapter(AbstractAdapter* adapter)
 {
     recycle_.SetAdapter(adapter);
     recycle_.InitRecycle();
 }
 
-UIView* UIList::GetSelectView()
+UIView* UIList6::GetSelectView()
 {
     if (onSelectedView_ != nullptr) {
         return onSelectedView_;
@@ -558,7 +558,7 @@ UIView* UIList::GetSelectView()
     return nullptr;
 }
 
-void UIList::PushBack(UIView* view)
+void UIList6::PushBack(UIView* view)
 {
     if (view == nullptr) {
         return;
@@ -578,7 +578,7 @@ void UIList::PushBack(UIView* view)
     UIViewGroup::Add(view);
 }
 
-void UIList::PushFront(UIView* view)
+void UIList6::PushFront(UIView* view)
 {
     if (view == nullptr) {
         return;
@@ -597,7 +597,7 @@ void UIList::PushFront(UIView* view)
     UIViewGroup::Insert(nullptr, view);
 }
 
-void UIList::PopItem(UIView* view)
+void UIList6::PopItem(UIView* view)
 {
     if (view == nullptr) {
         return;
@@ -613,7 +613,7 @@ void UIList::PopItem(UIView* view)
     UIViewGroup::Remove(view);
 }
 
-void UIList::SetHead(UIView* view)
+void UIList6::SetHead(UIView* view)
 {
     if (view != nullptr) {
         view->SetPosition(0, 0);
@@ -622,7 +622,7 @@ void UIList::SetHead(UIView* view)
     }
 }
 
-void UIList::MoveChildByOffset(int16_t xOffset, int16_t yOffset)
+void UIList6::MoveChildByOffset(int16_t xOffset, int16_t yOffset)
 {
     UIView* view = GetChildrenHead();
     if (view == nullptr) {
@@ -693,10 +693,10 @@ void UIList::MoveChildByOffset(int16_t xOffset, int16_t yOffset)
             if (isSelectViewFind && isRotating_ && vibratorFunc != nullptr) {
                 if (!isLoopList_ && (onSelectedIndex_ == 0 || onSelectedIndex_ == recycle_.adapter_->GetCount() - 1)) {
                     vibratorFunc(VibratorType::VIBRATOR_TYPE_THREE);
-                    GRAPHIC_LOGI("UIList::MoveChildByOffset calls TYPE_THREE vibrator");
+                    GRAPHIC_LOGI("UIList6::MoveChildByOffset calls TYPE_THREE vibrator");
                 } else {
                     vibratorFunc(VibratorType::VIBRATOR_TYPE_TWO);
-                    GRAPHIC_LOGI("UIList::MoveChildByOffset calls TYPE_TWO vibrator");
+                    GRAPHIC_LOGI("UIList6::MoveChildByOffset calls TYPE_TWO vibrator");
                 }
             }
 #endif
@@ -705,19 +705,19 @@ void UIList::MoveChildByOffset(int16_t xOffset, int16_t yOffset)
     } while (view != nullptr);
 }
 
-void UIList::StopAnimator()
+void UIList6::StopAnimator()
 {
     UIAbstractScroll::StopAnimator();
     if (!ReCalculateDragEnd()) {
         if ((scrollListener_ != nullptr) &&
-            (scrollListener_->GetScrollState() == ListScrollListener::SCROLL_STATE_MOVE)) {
-            scrollListener_->SetScrollState(ListScrollListener::SCROLL_STATE_STOP);
+            (scrollListener_->GetScrollState() == ListScrollListener6::SCROLL_STATE_MOVE)) {
+            scrollListener_->SetScrollState(ListScrollListener6::SCROLL_STATE_STOP);
             scrollListener_->OnScrollEnd(onSelectedIndex_, onSelectedView_);
         }
     }
 }
 
-uint16_t UIList::GetIndexInc(uint16_t index)
+uint16_t UIList6::GetIndexInc(uint16_t index)
 {
     uint16_t ret = index + 1;
     if (isLoopList_ && (recycle_.GetAdapterItemCount() != 0)) {
@@ -726,7 +726,7 @@ uint16_t UIList::GetIndexInc(uint16_t index)
     return ret;
 }
 
-uint16_t UIList::GetIndexDec(uint16_t index)
+uint16_t UIList6::GetIndexDec(uint16_t index)
 {
     if (index == 0) {
         if (isLoopList_) {
@@ -739,7 +739,7 @@ uint16_t UIList::GetIndexDec(uint16_t index)
     }
 }
 
-void UIList::ScrollTo(uint16_t index)
+void UIList6::ScrollTo(uint16_t index)
 {
     UIView* child = GetChildrenHead();
     UIView* tmp = nullptr;
@@ -753,7 +753,7 @@ void UIList::ScrollTo(uint16_t index)
     recycle_.InitRecycle();
 }
 
-void UIList::RefreshList()
+void UIList6::RefreshList()
 {
     int16_t topIndex = topIndex_;
     UIView* child = GetChildrenHead();
@@ -792,13 +792,13 @@ void UIList::RefreshList()
     Invalidate();
 }
 
-void UIList::RemoveAll()
+void UIList6::RemoveAll()
 {
     UIViewGroup::RemoveAll();
     recycle_.ClearScrapView();
 }
 
-void UIList::SetXScrollBarVisible(bool visible)
+void UIList6::SetXScrollBarVisible(bool visible)
 {
     bool lastVisible = xScrollBarVisible_;
     UIAbstractScroll::SetXScrollBarVisible(visible);
@@ -811,7 +811,7 @@ void UIList::SetXScrollBarVisible(bool visible)
     }
 }
 
-void UIList::SetYScrollBarVisible(bool visible)
+void UIList6::SetYScrollBarVisible(bool visible)
 {
     bool lastVisible = yScrollBarVisible_;
     UIAbstractScroll::SetYScrollBarVisible(visible);
@@ -824,7 +824,7 @@ void UIList::SetYScrollBarVisible(bool visible)
     }
 }
 
-void UIList::CalculateReboundDistance(int16_t& dragDistanceX, int16_t& dragDistanceY)
+void UIList6::CalculateReboundDistance(int16_t& dragDistanceX, int16_t& dragDistanceY)
 {
     if (isLoopList_) {
         return;
@@ -867,7 +867,7 @@ void UIList::CalculateReboundDistance(int16_t& dragDistanceX, int16_t& dragDista
 
 /* this is a temporary implementation just used for list and will be replaced later,
    we assume size of all items in scroll are equal for now. */
-void UIList::FixDistance(int16_t& distanceX, int16_t& distanceY)
+void UIList6::FixDistance(int16_t& distanceX, int16_t& distanceY)
 {
     if (childrenHead_ == nullptr) {
         GRAPHIC_LOGW("cannot fix drag distance without children!");
@@ -881,7 +881,7 @@ void UIList::FixDistance(int16_t& distanceX, int16_t& distanceY)
     }
 }
 
-void UIList::FixHorDistance(int16_t& distanceX)
+void UIList6::FixHorDistance(int16_t& distanceX)
 {
     UIView* targetView = childrenHead_;
     while (targetView != nullptr) {
@@ -904,7 +904,7 @@ void UIList::FixHorDistance(int16_t& distanceX)
     }
 }
 
-void UIList::FixVerDistance(int16_t& distanceY)
+void UIList6::FixVerDistance(int16_t& distanceY)
 {
     UIView* targetView = childrenHead_;
     while (targetView != nullptr) {

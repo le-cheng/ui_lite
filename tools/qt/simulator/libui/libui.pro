@@ -4,8 +4,8 @@ TEMPLATE = lib
 
 CONFIG += c++11
 
-QMAKE_CXXFLAGS += -Werror 
-QMAKE_CXXFLAGS += -Wno-error=unused-parameter 
+QMAKE_CXXFLAGS += -Werror
+QMAKE_CXXFLAGS += -Wno-error=unused-parameter
 QMAKE_CXXFLAGS += -Wno-error=attributes
 QMAKE_CXXFLAGS += -Wno-error=missing-field-initializers
 QMAKE_CXXFLAGS += -Wno-error=deprecated-copy
@@ -111,6 +111,7 @@ SOURCES += \
     ../../../../frameworks/components/ui_label.cpp \
     ../../../../frameworks/components/ui_label_button.cpp \
     ../../../../frameworks/components/ui_list.cpp \
+    ../../../../frameworks/components/ui_list6.cpp \
     ../../../../frameworks/components/ui_picker.cpp \
     ../../../../frameworks/components/ui_qrcode.cpp \
     ../../../../frameworks/components/ui_radio_button.cpp \
@@ -307,6 +308,7 @@ HEADERS += \
     ../../../../interfaces/kits/components/ui_label.h \
     ../../../../interfaces/kits/components/ui_label_button.h \
     ../../../../interfaces/kits/components/ui_list.h \
+    ../../../../interfaces/kits/components/ui_list6.h \
     ../../../../interfaces/kits/components/ui_picker.h \
     ../../../../interfaces/kits/components/ui_qrcode.h \
     ../../../../interfaces/kits/components/ui_radio_button.h \
