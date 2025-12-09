@@ -23,6 +23,7 @@
 #include "gfx_utils/image_info.h"
 #include "gfx_utils/style.h"
 #include "gfx_utils/transform.h"
+#include "gfx_utils/geometry2d.h"
 
 namespace OHOS {
 class BaseGfxEngine;
@@ -123,6 +124,24 @@ public:
                                OpacityType opacity,
                                const TransformMap& transMap,
                                const TransformDataInfo& dataInfo) = 0;
+
+    virtual void DrawPerspectiveTransform(BufferInfo& dst,
+                               const Rect& mask,
+                               const Point& position,
+                               ColorType color,
+                               OpacityType opacity,
+                               const Matrix3<float>& matrix,
+                               const TransformDataInfo& dataInfo) {}
+
+    virtual void QuadToQuad(BufferInfo& dst,
+                             const Rect& mask,
+                             BufferInfo& src,
+                             const Rect& srcRect,
+                             ColorType color,
+                             OpacityType opacity,
+                             const PointF srcQuad[4],
+                             const PointF dstQuad[4]) {}
+
 
     // x/y: center of a circle
     virtual void ClipCircle(const ImageInfo* info, float x, float y, float radius) = 0;

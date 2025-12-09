@@ -15,6 +15,12 @@
 
 #include "monitor.h"
 
+#include <QtGui/QPainter>
+#include <QtGui/QImage>
+#include <QtGui/QTransform>
+#include <QtCore/QDebug>
+#include <cstdio>
+
 #include "common/graphic_startup.h"
 #include "common/image_decode_ability.h"
 #include "common/input_device_manager.h"
@@ -131,5 +137,121 @@ void Monitor::InitGUI()
     UpdatePaint(tftFb_, HORIZONTAL_RESOLUTION, VERTICAL_RESOLUTION);
 }
 
+void Monitor::DrawPerspectiveTransform(BufferInfo& dst,
+                                       const Rect& mask,
+                                       const Point& position,
+                                       ColorType color,
+                                       OpacityType opacity,
+                                       const Matrix3<float>& matrix,
+                                       const TransformDataInfo& dataInfo)
+{
+    if ((dst.virAddr == nullptr) || (dataInfo.data == nullptr)) {
+        return;
+    }
+
+    QImage::Format dstFormat = QImage::Format_ARGB32_Premultiplied;
+    if (dst.mode == RGB565) {
+        dstFormat = QImage::Format_RGB16;
+    } else if (dst.mode == RGB888) {
+        dstFormat = QImage::Format_RGB888;
+    }
+
+    QImage dstImg(reinterpret_cast<uchar*>(dst.virAddr), dst.width, dst.height, dst.stride, dstFormat);
+
+    QImage::Format srcFormat = QImage::Format_ARGB32_Premultiplied;
+    if (dataInfo.header.colorMode == RGB565) {
+        srcFormat = QImage::Format_RGB16;
+    } else if (dataInfo.header.colorMode == RGB888) {
+        srcFormat = QImage::Format_RGB888;
+    }
+
+    QImage srcImg(const_cast<uchar*>(dataInfo.data), dataInfo.header.width, dataInfo.header.height, srcFormat);
+
+    Matrix3<float> m = matrix;
+    QTransform transform(m[0][0], m[0][1], m[0][2],
+                         m[1][0], m[1][1], m[1][2],
+                         m[2][0], m[2][1], m[2][2]);
+
+    QTransform transPos;
+    transPos.translate(position.x, position.y);
+    transform = transPos * transform;
+
+    QPainter painter(&dstImg);
+    painter.setClipRect(mask.GetLeft(), mask.GetTop(), mask.GetWidth(), mask.GetHeight());
+
+    if (opacity != OPA_OPAQUE) {
+        painter.setOpacity(opacity / 255.0);
+    }
+
+    painter.setRenderHint(QPainter::SmoothPixmapTransform);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setTransform(transform);
+    painter.drawImage(0, 0, srcImg);
+}
+
 void Monitor::GUILoopQuit() const {}
+
+void Monitor::QuadToQuad(BufferInfo& dst,
+                         const Rect& mask,
+                         BufferInfo& src,
+                         const Rect& srcRect,
+                         ColorType color,
+                         OpacityType opacity,
+                         const PointF srcQuad[4],
+                         const PointF dstQuad[4])
+{
+    if ((dst.virAddr == nullptr) || (src.virAddr == nullptr)) {
+        return;
+    }
+
+    QImage::Format dstFormat = QImage::Format_ARGB32_Premultiplied;
+    if (dst.mode == RGB565) {
+        dstFormat = QImage::Format_RGB16;
+    } else if (dst.mode == RGB888) {
+        dstFormat = QImage::Format_RGB888;
+    }
+
+    QImage dstImg(reinterpret_cast<uchar*>(dst.virAddr), dst.width, dst.height, dst.stride, dstFormat);
+
+    QImage::Format srcFormat = QImage::Format_ARGB32_Premultiplied;
+    if (src.mode == RGB565) {
+        srcFormat = QImage::Format_RGB16;
+    } else if (src.mode == RGB888) {
+        srcFormat = QImage::Format_RGB888;
+    }
+
+    QImage srcFull(reinterpret_cast<uchar*>(src.virAddr), src.width, src.height, src.stride, srcFormat);
+
+    QPolygonF srcQ;
+    float sx = srcRect.GetLeft();
+    float sy = srcRect.GetTop();
+    srcQ << QPointF(srcQuad[0].x - sx, srcQuad[0].y - sy)
+         << QPointF(srcQuad[1].x - sx, srcQuad[1].y - sy)
+         << QPointF(srcQuad[2].x - sx, srcQuad[2].y - sy)
+         << QPointF(srcQuad[3].x - sx, srcQuad[3].y - sy);
+
+    QPolygonF dstQ;
+    dstQ << QPointF(dstQuad[0].x, dstQuad[0].y)
+         << QPointF(dstQuad[1].x, dstQuad[1].y)
+         << QPointF(dstQuad[2].x, dstQuad[2].y)
+         << QPointF(dstQuad[3].x, dstQuad[3].y);
+
+    QTransform transform;
+    if (!QTransform::quadToQuad(srcQ, dstQ, transform)) {
+        return;
+    }
+
+    QPainter painter(&dstImg);
+    // painter.setClipRect(mask.GetLeft(), mask.GetTop(), mask.GetWidth(), mask.GetHeight());
+    if (opacity != OPA_OPAQUE) {
+        painter.setOpacity(opacity / 255.0);
+    }
+    painter.setRenderHint(QPainter::SmoothPixmapTransform);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setTransform(transform);
+    QRect srcCrop(srcRect.GetLeft(), srcRect.GetTop(), srcRect.GetWidth(), srcRect.GetHeight());
+    QRectF dstRect(0, 0, srcCrop.width(), srcCrop.height());
+    painter.drawImage(dstRect, srcFull, srcCrop);
+}
+
 } // namespace OHOS

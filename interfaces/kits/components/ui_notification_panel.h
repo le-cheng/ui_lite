@@ -120,6 +120,7 @@ public:
     void ClearChilds();
     void UpdateContent(const MessageData& data);
     void LayoutLabels();
+    void CopyFrom(const MessageContentView& src);
 
 private:
     UILabel* titleLabel_;
@@ -141,6 +142,7 @@ public:
     void SetOffsetAndInset(int16_t offsetY, int16_t inset);
     void UpdateContent(const MessageData& data, int num);
     void LayoutStack();
+    MessageContentView* GetMessageContentView() const { return messageContentView_; }
 
 private:
     int16_t offsetY_ = 6;
@@ -241,6 +243,7 @@ public:
     uint8_t GetParentListDirection(UIView* view);
     void LayoutChildViews();
     void SetMessageNumber(int number);
+    MessageContentView* GetMessageContentView() const;
 
 private:
     bool CreateChildViews();
@@ -311,7 +314,7 @@ private:
     char appName_[MessageData::MAX_APP_NAME_LEN];
 };
 
-class UINotificationPanel : public UIBasePanel, public OnMessageListener {
+class UINotificationPanel : public UIBasePanel, public OnMessageListener, public UIView::OnClickListener {
 public:
     UINotificationPanel();
     virtual ~UINotificationPanel();
@@ -336,9 +339,14 @@ public:
     void OnExitAppMessages(UIView& item) override;
     void OnClearMessages() override;
     void GetTargetView(const Point& point, UIView** current, UIView** target) override;
+    bool OnClick(UIView& view, const ClickEvent& event) override;
 
     void ShowAppMessageList(const char* appName);
     void ShowMainMessageList();
+    void HideMessageDetail();
+    void HideMessageDetailAnimated();
+    void HideMessageDetailAnimatedDown();
+    void ShowMessageDetail(UINotificationItem& item);
 
     void SetDataProvider(INotificationDataProvider* provider)
     {
@@ -356,6 +364,8 @@ private:
     bool CreateEmptyView();
     void UpdateEmptyStateVisibility();
     void CleanupComponents();
+    void UpdateDetailOverlayGeometry(const Rect& rect);
+    void SetDetailOverlayOpacity(uint8_t opa);
 
     UICircleList* messageList_;
     UIViewGroup* headerView_;
@@ -369,6 +379,15 @@ private:
     OnMessageListener* externalMessageListener_;
     bool isInitialized_;
     INotificationDataProvider* dataProvider_ = nullptr;
+    UIViewGroup* detailOverlay_ = nullptr;
+    MessageContentView* detailContentView_ = nullptr;
+    class DetailExpandAnimator;
+    DetailExpandAnimator* detailAnimator_ = nullptr;
+    UILabelButton* detailDeleteButton_ = nullptr;
+    Rect detailStartRect_;
+    bool hasDetailStartRect_ = false;
+    char detailAppName_[MessageData::MAX_APP_NAME_LEN];
+    uint32_t detailMessageId_ = 0;
 };
 
 } // namespace OHOS

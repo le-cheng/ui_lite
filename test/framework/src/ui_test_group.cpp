@@ -58,6 +58,7 @@
 #include "test_scroll_bar/ui_test_scroll_bar.h"
 #include "test_slider/ui_test_slider.h"
 #include "test_texture_mapper/ui_test_texture_mapper.h"
+#include "test_perspective_transform/ui_test_perspective_transform.h"
 #include "test_transform/ui_test_transform.h"
 #include "test_ui_analog_clock/ui_test_analog_clock.h"
 #include "test_ui_dump_dom_tree/ui_test_dump_dom.h"
@@ -91,6 +92,7 @@ void UITestGroup::AddTestCase(TestCaseInfo testCaseInfo)
 
 void UITestGroup::SetUpTestCase()
 {
+    testCaseList_.PushBack(TestCaseInfo{"PerspectiveTransform", new UITestPerspectiveTransform()});
     testCaseList_.PushBack(TestCaseInfo{"StatusPanel", new UITestStatusPanel()});
     testCaseList_.PushBack(TestCaseInfo{"NotificationPanel", new UITestNotificationPanel()});
     testCaseList_.PushBack(TestCaseInfo{"SpannableString", new UITestSpannableString()});

@@ -1,5 +1,6 @@
 #include "components/ui_notification_panel.h"
 #include "math.h"
+#include "animator/interpolation.h"
 
 namespace OHOS {
 namespace {
@@ -290,7 +291,7 @@ void UINotificationPanel::RefreshMessages()
         GRAPHIC_LOGE("UINotificationPanel not initialized or messageList_ is null");
         return;
     }
-    
+
     messageList_->RefreshList();
     UpdateEmptyStateVisibility();
 }
@@ -319,6 +320,9 @@ void UINotificationPanel::OnMessageClicked(UIView& item)
     const char* appName = itemRef.GetAppName();
     if (messageAdapter_.GetMode() == MessageAdapter::GROUP_SUMMARY) {
         ShowAppMessageList(appName);
+    }
+    else if (messageAdapter_.GetMode() == MessageAdapter::APP_DETAIL) {
+        ShowMessageDetail(itemRef);
     }
 
     if (externalMessageListener_ != nullptr) {
@@ -387,6 +391,248 @@ void UINotificationPanel::ShowMainMessageList()
     }
 }
 #endif
+
+class UINotificationPanel::DetailExpandAnimator final : public AnimatorCallback {
+public:
+    explicit DetailExpandAnimator(UINotificationPanel& panel)
+        : panel_(panel), animator_(this, nullptr, ANIMATOR_DURATION, false), reverse_(false) {}
+    void Start(const Rect& startRect, const Rect& endRect, bool reverse)
+    {
+        reverse_ = reverse;
+        startLeft_ = startRect.GetLeft();
+        startTop_ = startRect.GetTop();
+        startRight_ = startRect.GetRight();
+        startBottom_ = startRect.GetBottom();
+        endLeft_ = endRect.GetLeft();
+        endTop_ = endRect.GetTop();
+        endRight_ = endRect.GetRight();
+        endBottom_ = endRect.GetBottom();
+        animator_.Start();
+    }
+    void Callback(UIView* view) override
+    {
+        uint16_t t = animator_.GetRunTime();
+        uint16_t d = animator_.GetTime();
+        int16_t l = static_cast<int16_t>(EasingEquation::QuintEaseOut(startLeft_, endLeft_, t, d));
+        int16_t r = static_cast<int16_t>(EasingEquation::QuintEaseOut(startRight_, endRight_, t, d));
+        int16_t tp = static_cast<int16_t>(EasingEquation::QuintEaseOut(startTop_, endTop_, t, d));
+        int16_t b = static_cast<int16_t>(EasingEquation::QuintEaseOut(startBottom_, endBottom_, t, d));
+        Rect rect(l, tp, r, b);
+        uint8_t opa = static_cast<uint8_t>(OPA_OPAQUE * t / d);
+        if (reverse_) {
+            opa = static_cast<uint8_t>(OPA_OPAQUE - opa);
+        }
+        panel_.SetDetailOverlayOpacity(opa);
+        panel_.UpdateDetailOverlayGeometry(rect);
+        if (t >= d) {
+            animator_.Stop();
+        }
+    }
+    void OnStop(UIView& view) override
+    {
+        Rect rect(endLeft_, endTop_, endRight_, endBottom_);
+        panel_.UpdateDetailOverlayGeometry(rect);
+        panel_.SetDetailOverlayOpacity(reverse_ ? OPA_TRANSPARENT : OPA_OPAQUE);
+        if (reverse_) {
+            panel_.HideMessageDetail();
+        }
+    }
+private:
+    static constexpr uint16_t ANIMATOR_DURATION = 1000;
+    UINotificationPanel& panel_;
+    Animator animator_;
+    bool reverse_;
+    int16_t startLeft_;
+    int16_t startTop_;
+    int16_t startRight_;
+    int16_t startBottom_;
+    int16_t endLeft_;
+    int16_t endTop_;
+    int16_t endRight_;
+    int16_t endBottom_;
+};
+
+#if 1
+class DetailOverlayView : public UIViewGroup {
+public:
+    explicit DetailOverlayView(UINotificationPanel& panel) : panel_(panel)
+    {
+        SetTouchable(true);
+        SetDraggable(true);
+    }
+    ~DetailOverlayView()
+    {
+        // if (detailDeleteButton_ != nullptr) {
+        //     detailDeleteButton_->SetOnClickListener(nullptr);
+        //     delete detailDeleteButton_;
+        //     detailDeleteButton_ = nullptr;
+        // }
+    }
+
+    bool OnDragStartEvent(const DragEvent& event) override
+    {
+        totalX_ = 0;
+        isHorizontal_ = (event.GetDragDirection() == DragEvent::DIRECTION_LEFT_TO_RIGHT ||
+                         event.GetDragDirection() == DragEvent::DIRECTION_RIGHT_TO_LEFT);
+        return isHorizontal_;
+    }
+
+    bool OnDragEvent(const DragEvent& event) override
+    {
+        if (!isHorizontal_) {
+            return false;
+        }
+        totalX_ += event.GetDeltaX();
+        return true;
+    }
+
+    bool OnDragEndEvent(const DragEvent& event) override
+    {
+        static_cast<void>(event);
+        if (!isHorizontal_) {
+            return false;
+        }
+        int16_t threshold = GetWidth() / 6;
+        if (totalX_ > threshold) {
+            panel_.HideMessageDetailAnimated();
+            return true;
+        }
+        return true;
+    }
+
+private:
+    UINotificationPanel& panel_;
+    int16_t totalX_ {0};
+    bool isHorizontal_ {false};
+};
+#endif
+
+void UINotificationPanel::ShowMessageDetail(UINotificationItem& item)
+{
+    if (detailOverlay_ == nullptr) {
+        detailOverlay_ = new DetailOverlayView(*this);
+        if (detailOverlay_ == nullptr) {
+            return;
+        }
+        Add(detailOverlay_);
+    }
+    detailOverlay_->SetPosition(0, 0, GetWidth(), GetHeight());
+    detailOverlay_->SetStyle(STYLE_BACKGROUND_COLOR, Color::Purple().full);
+    detailOverlay_->SetStyle(STYLE_BACKGROUND_OPA, OPA_TRANSPARENT);
+
+    if (detailDeleteButton_ == nullptr) {
+        detailDeleteButton_ = new UILabelButton();
+        if (detailDeleteButton_ == nullptr) {
+            return;
+        }
+        detailOverlay_->Add(detailDeleteButton_);
+    }
+    detailDeleteButton_->SetText("删除");
+    detailDeleteButton_->SetStyle(STYLE_TEXT_COLOR, Color::White().full);
+    detailDeleteButton_->SetOnClickListener(this);
+
+    if (detailContentView_ == nullptr) {
+        detailContentView_ = new MessageContentView();
+        if (detailContentView_ == nullptr) {
+            return;
+        }
+        detailOverlay_->Add(detailContentView_);
+    }
+
+    MessageContentView* messageContentView = item.GetMessageContentView();
+    if (messageContentView != nullptr) {
+        detailContentView_->CopyFrom(*messageContentView);
+        detailContentView_->SetStyle(STYLE_BORDER_RADIUS, 40);
+    }
+
+    Rect rect = messageContentView->GetRect();
+    Rect rrect = GetRect();
+    int16_t x = rect.GetX() - rrect.GetX();
+    int16_t y = rect.GetY() - rrect.GetY();
+    int16_t w = rect.GetWidth();
+    int16_t h = rect.GetHeight();
+    Rect detailRect(x, y, x + w - 1, y + h - 1);
+
+    MessageData::SafeCopyString(detailAppName_, item.GetAppName(), MessageData::MAX_APP_NAME_LEN);
+    detailMessageId_ = item.GetMessageId();
+    detailStartRect_ = detailRect;
+    hasDetailStartRect_ = true;
+    UpdateDetailOverlayGeometry(detailStartRect_);
+    if (detailAnimator_ == nullptr) {
+        detailAnimator_ = new DetailExpandAnimator(*this);
+    }
+    int16_t padding = 16;
+    int16_t topOffset = 12;
+    int16_t bottomBarH = 56;
+    Rect endRect(padding, topOffset, GetWidth() - padding - 1, GetHeight() - bottomBarH - padding - 1);
+    detailAnimator_->Start(detailStartRect_, endRect, false);
+}
+
+void UINotificationPanel::UpdateDetailOverlayGeometry(const Rect& rect)
+{
+    if (detailOverlay_ == nullptr) {
+        return;
+    }
+    int16_t w = rect.GetWidth();
+    int16_t h = rect.GetHeight();
+    if (detailDeleteButton_ != nullptr) {
+        int16_t delW = 128;
+        int16_t delH = 40;
+        int16_t delX = (GetWidth() - delW) / 2;
+        int16_t delY = GetHeight() - delH - 12;
+        detailDeleteButton_->SetPosition(delX, delY, delW, delH);
+    }
+    if (detailContentView_ != nullptr) {
+        detailContentView_->SetPosition(rect.GetLeft(), rect.GetTop(), w, h);
+        detailContentView_->LayoutLabels();
+    }
+    Invalidate();
+}
+
+void UINotificationPanel::SetDetailOverlayOpacity(uint8_t opa)
+{
+    if (detailOverlay_ != nullptr) {
+        detailOverlay_->SetStyle(STYLE_BACKGROUND_OPA, opa);
+        detailOverlay_->Invalidate();
+    }
+}
+
+void UINotificationPanel::HideMessageDetail()
+{
+    if (detailOverlay_ == nullptr) {
+        return;
+    }
+    Remove(detailOverlay_);
+    delete detailOverlay_;
+    detailOverlay_ = nullptr;
+    if (detailContentView_ != nullptr) {
+        delete detailContentView_;
+        detailContentView_ = nullptr;
+    }
+    if (detailDeleteButton_ != nullptr) {
+        detailDeleteButton_->SetOnClickListener(nullptr);
+        delete detailDeleteButton_;
+        detailDeleteButton_ = nullptr;
+    }
+
+    if (detailAnimator_ != nullptr) {
+        delete detailAnimator_;
+        detailAnimator_ = nullptr;
+    }
+}
+
+bool UINotificationPanel::OnClick(UIView& view, const ClickEvent& event)
+{
+    if (detailDeleteButton_ != nullptr && (&view == detailDeleteButton_)) {
+        if (detailAppName_[0] != '\0' && dataProvider_ != nullptr) {
+            RemoveMessage(detailAppName_, detailMessageId_);
+            RefreshMessages();
+        }
+        HideMessageDetailAnimatedDown();
+        return true;
+    }
+    return false;
+}
 
 // ============================================================================
 // MessageAdapter Implementation
@@ -646,6 +892,35 @@ void MessageContentView::LayoutLabels()
 }
 #endif
 
+void MessageContentView::CopyFrom(const MessageContentView& src)
+{
+    if (titleLabel_ != nullptr && src.titleLabel_ != nullptr) {
+        titleLabel_->SetText(src.titleLabel_->GetText());
+    }
+    if (contentLabel_ != nullptr && src.contentLabel_ != nullptr) {
+        contentLabel_->SetText(src.contentLabel_->GetText());
+    }
+    if (timeLabel_ != nullptr && src.timeLabel_ != nullptr) {
+        timeLabel_->SetText(src.timeLabel_->GetText());
+        timeLabel_->SetAlign(src.timeLabel_->GetHorAlign(), src.timeLabel_->GetVerAlign());
+    }
+    if (appNameLabel_ != nullptr && src.appNameLabel_ != nullptr) {
+        appNameLabel_->SetText(src.appNameLabel_->GetText());
+    }
+    if (iconView_ != nullptr && src.iconView_ != nullptr) {
+        const char* path = src.iconView_->GetPath();
+        if (path != nullptr) {
+            iconView_->SetSrc(path);
+        }
+    }
+    int64_t colorFull = src.GetStyle(STYLE_BACKGROUND_COLOR);
+    int64_t bgOpa = src.GetStyle(STYLE_BACKGROUND_OPA);
+    SetStyle(STYLE_BACKGROUND_COLOR, colorFull);
+    SetStyle(STYLE_BACKGROUND_OPA, bgOpa);
+    LayoutLabels();
+    Invalidate();
+}
+
 // ============================================================================
 // UINotificationItem Implementation - 主容器，负责拖拽方向判断
 // ============================================================================
@@ -778,6 +1053,11 @@ void UINotificationItem::UpdateMessageItem(const MessageData& data)
 void UINotificationItem::SetMessageNumber(int number)
 {
     messageNumber_ = number;
+}
+
+MessageContentView* UINotificationItem::GetMessageContentView() const
+{
+    return (messageStackView_ == nullptr) ? nullptr : messageStackView_->GetMessageContentView();
 }
 
 uint32_t UINotificationItem::GetMessageId() const
@@ -978,6 +1258,7 @@ void UINotificationItem::Callback(UIView* view)
 void UINotificationItem::OnStop(UIView& view)
 {
     GRAPHIC_LOGE("UINotificationItem::OnStop");
+    static_cast<void>(view);
     if (clearButton_ == nullptr) {
         return;
     }
@@ -1175,4 +1456,35 @@ void UICircleList::ApplyCircularTransform(UIView* view)
     }
 }
 
+} // namespace OHOS
+namespace OHOS {
+void UINotificationPanel::HideMessageDetailAnimated()
+{
+    if (detailOverlay_ == nullptr || detailAnimator_ == nullptr || detailContentView_ == nullptr) {
+        HideMessageDetail();
+        return;
+    }
+    Rect fullRect(detailContentView_->GetX(), detailContentView_->GetY(),
+                  detailContentView_->GetX() + detailContentView_->GetWidth() - 1,
+                  detailContentView_->GetY() + detailContentView_->GetHeight() - 1);
+    if (!hasDetailStartRect_) {
+        HideMessageDetail();
+        return;
+    }
+    detailAnimator_->Start(fullRect, detailStartRect_, true);
+}
+void UINotificationPanel::HideMessageDetailAnimatedDown()
+{
+    if (detailOverlay_ == nullptr || detailAnimator_ == nullptr || detailContentView_ == nullptr) {
+        HideMessageDetail();
+        return;
+    }
+    Rect fullRect(detailContentView_->GetX(), detailContentView_->GetY(),
+                  detailContentView_->GetX() + detailContentView_->GetWidth() - 1,
+                  detailContentView_->GetY() + detailContentView_->GetHeight() - 1);
+    int16_t w = detailContentView_->GetWidth();
+    int16_t h = detailContentView_->GetHeight();
+    Rect downRect(fullRect.GetLeft(), GetHeight() + 1, fullRect.GetLeft() + w - 1, GetHeight() + h);
+    detailAnimator_->Start(fullRect, downRect, true);
+}
 } // namespace OHOS

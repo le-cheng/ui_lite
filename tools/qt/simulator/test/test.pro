@@ -71,6 +71,7 @@ SOURCES += \
     ../../../../test/uitest/test_layout/ui_test_advanced_layout.cpp \
     ../../../../test/uitest/test_layout/ui_test_basic_layout.cpp \
     ../../../../test/uitest/test_opacity/ui_test_opacity.cpp \
+    ../../../../test/uitest/test_perspective_transform/ui_test_perspective_transform.cpp \
     ../../../../test/uitest/test_picker/ui_test_ui_picker.cpp \
     ../../../../test/uitest/test_progress_bar/ui_test_box_progress.cpp \
     ../../../../test/uitest/test_progress_bar/ui_test_circle_progress.cpp \
@@ -128,6 +129,7 @@ HEADERS += \
     ../../../../test/uitest/test_layout/ui_test_advanced_layout.h \
     ../../../../test/uitest/test_layout/ui_test_basic_layout.h \
     ../../../../test/uitest/test_opacity/ui_test_opacity.h \
+    ../../../../test/uitest/test_perspective_transform/ui_test_perspective_transform.h \
     ../../../../test/uitest/test_picker/ui_test_ui_picker.h \
     ../../../../test/uitest/test_progress_bar/ui_test_box_progress.h \
     ../../../../test/uitest/test_progress_bar/ui_test_circle_progress.h \

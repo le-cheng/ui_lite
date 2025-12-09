@@ -123,6 +123,8 @@ SOURCES += \
     ../../../../frameworks/components/ui_notification_panel.cpp \
     ../../../../frameworks/components/ui_swipe_view.cpp \
     ../../../../frameworks/components/ui_texture_mapper.cpp \
+    ../../../../frameworks/components/ui_earth.cpp \
+    ../../../../frameworks/components/earth_renderer.cpp \
     ../../../../frameworks/components/ui_time_picker.cpp \
     ../../../../frameworks/components/ui_toggle_button.cpp \
     ../../../../frameworks/components/ui_view.cpp \
@@ -243,6 +245,7 @@ HEADERS += \
     ../../../../frameworks/dfx/key_event_injector.h \
     ../../../../frameworks/dfx/point_event_injector.h \
     ../../../../frameworks/components/ui_tree_manager.h \
+    ../../../../frameworks/components/earth_renderer.h \
     ../../../../frameworks/dfx/ui_view_bounds.h \
     ../../../../frameworks/dock/input_device.h \
     ../../../../frameworks/dock/pointer_input_device.h \
@@ -320,6 +323,7 @@ HEADERS += \
     ../../../../interfaces/kits/components/ui_base_panel.h \
     ../../../../interfaces/kits/components/ui_swipe_view.h \
     ../../../../interfaces/kits/components/ui_texture_mapper.h \
+    ../../../../interfaces/kits/components/ui_earth.h \
     ../../../../interfaces/kits/components/ui_time_picker.h \
     ../../../../interfaces/kits/components/ui_toggle_button.h \
     ../../../../interfaces/kits/components/ui_view.h \

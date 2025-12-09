@@ -38,6 +38,22 @@ public:
     void GUILoopQuit() const;
     void Flush(const Rect &rect) override;
     BufferInfo* GetFBBufferInfo() override;
+    void DrawPerspectiveTransform(BufferInfo& dst,
+                                  const Rect& mask,
+                                  const Point& position,
+                                  ColorType color,
+                                  OpacityType opacity,
+                                  const Matrix3<float>& matrix,
+                                  const TransformDataInfo& dataInfo) override;
+
+    void QuadToQuad(BufferInfo& dst,
+                    const Rect& mask,
+                    BufferInfo& src,
+                    const Rect& srcRect,
+                    ColorType color,
+                    OpacityType opacity,
+                    const PointF srcQuad[4],
+                    const PointF dstQuad[4]) override;
 signals:
     void UpdatePaintSignal(uint32_t* tftFb, uint32_t imgWidth, uint32_t imgHeight);
 
