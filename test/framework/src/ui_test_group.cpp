@@ -66,6 +66,7 @@
 #include "test_ui_list_view/ui_test_list_layout.h"
 #include "test_ui_scroll_view/ui_test_ui_scroll_view.h"
 #include "test_ui_swipe_view/ui_test_ui_swipe_view.h"
+#include "test_tile_view/ui_test_tile_view.h"
 #include "test_view_bitmap/ui_test_view_bitmap.h"
 #include "test_view_bounds/ui_test_view_bounds.h"
 #include "test_view_group/ui_test_view_group.h"
@@ -92,6 +93,7 @@ void UITestGroup::AddTestCase(TestCaseInfo testCaseInfo)
 
 void UITestGroup::SetUpTestCase()
 {
+    testCaseList_.PushBack(TestCaseInfo{"UITileView", new UITestTileView()});
     testCaseList_.PushBack(TestCaseInfo{"PerspectiveTransform", new UITestPerspectiveTransform()});
     testCaseList_.PushBack(TestCaseInfo{"StatusPanel", new UITestStatusPanel()});
     testCaseList_.PushBack(TestCaseInfo{"NotificationPanel", new UITestNotificationPanel()});

@@ -148,6 +148,7 @@ if (os_level != "standard") {
       "frameworks/components/ui_slider.cpp",
       "frameworks/components/ui_surface_view.cpp",
       "frameworks/components/ui_swipe_view.cpp",
+      "frameworks/components/ui_tile_view.cpp",
       "frameworks/components/ui_texture_mapper.cpp",
       "frameworks/components/ui_time_picker.cpp",
       "frameworks/components/ui_toggle_button.cpp",

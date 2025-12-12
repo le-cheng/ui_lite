@@ -89,6 +89,7 @@ SOURCES += \
     ../../../../test/uitest/test_ui_list_view/ui_test_list_layout.cpp \
     ../../../../test/uitest/test_ui_scroll_view/ui_test_ui_scroll_view.cpp \
     ../../../../test/uitest/test_ui_swipe_view/ui_test_ui_swipe_view.cpp \
+    ../../../../test/uitest/test_tile_view/ui_test_tile_view.cpp \
     ../../../../test/uitest/test_status_panel/ui_test_status_panel.cpp \
     ../../../../test/uitest/test_notification_panel/ui_test_notification_panel.cpp \
     ../../../../test/uitest/test_vector_font/ui_test_vector_font.cpp \
@@ -147,6 +148,7 @@ HEADERS += \
     ../../../../test/uitest/test_ui_list_view/ui_test_list_layout.h \
     ../../../../test/uitest/test_ui_scroll_view/ui_test_ui_scroll_view.h \
     ../../../../test/uitest/test_ui_swipe_view/ui_test_ui_swipe_view.h \
+    ../../../../test/uitest/test_tile_view/ui_test_tile_view.h \
     ../../../../test/uitest/test_status_panel/ui_test_status_panel.h \
     ../../../../test/uitest/test_notification_panel/ui_test_notification_panel.h \
     ../../../../test/uitest/test_vector_font/ui_test_vector_font.h \

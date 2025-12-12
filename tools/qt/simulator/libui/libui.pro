@@ -122,6 +122,7 @@ SOURCES += \
     ../../../../frameworks/components/ui_status_panel.cpp \
     ../../../../frameworks/components/ui_notification_panel.cpp \
     ../../../../frameworks/components/ui_swipe_view.cpp \
+    ../../../../frameworks/components/ui_tile_view.cpp \
     ../../../../frameworks/components/ui_texture_mapper.cpp \
     ../../../../frameworks/components/ui_earth.cpp \
     ../../../../frameworks/components/earth_renderer.cpp \

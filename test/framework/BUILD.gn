@@ -64,6 +64,7 @@ test_sources = [
   "../uitest/test_ui_list_view/ui_test_list_layout.cpp",
   "../uitest/test_ui_scroll_view/ui_test_ui_scroll_view.cpp",
   "../uitest/test_ui_swipe_view/ui_test_ui_swipe_view.cpp",
+  "../uitest/test_tile_view/ui_test_tile_view.cpp",
   "../uitest/test_vector_font/ui_test_vector_font.cpp",
   "../uitest/test_view_bitmap/ui_test_view_bitmap.cpp",
   "../uitest/test_view_bounds/ui_test_view_bounds.cpp",
