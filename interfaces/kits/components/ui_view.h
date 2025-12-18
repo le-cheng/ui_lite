@@ -92,6 +92,7 @@ enum UIViewType : uint8_t {
     UI_QRCODE,
     UI_NOTIFICATION_PANEL,
     UI_STATUS_PANEL,
+    UI_TILE_VIEW,
     UI_NUMBER_MAX
 };
 
@@ -105,7 +106,7 @@ const char* const VIEW_TYPE_STRING[UI_NUMBER_MAX] = {
     "UIAbstractClock",  "UIAbstractProgress", "UIAbstractScroll", "UIAxis",
     "UIButton",         "UICanvas",           "UIChart",          "UIImageAnimatorView",
     "UIRepeatButton",   "UITextureMapper",    "UIDialog",         "UIQrcode",
-    "UINotificationCenter", "UI_STATUS_PANEL"
+    "UINotificationCenter", "UIStatusPanel",  "UITileView"
 };
 #endif // ENABLE_DEBUG
 

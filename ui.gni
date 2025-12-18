@@ -63,6 +63,7 @@ arkui_ui_lite_sources = [
   "$ARKUI_UI_LITE_PATH/frameworks/components/ui_slider.cpp",
   "$ARKUI_UI_LITE_PATH/frameworks/components/ui_surface_view.cpp",
   "$ARKUI_UI_LITE_PATH/frameworks/components/ui_swipe_view.cpp",
+  "$ARKUI_UI_LITE_PATH/frameworks/components/ui_tile_view.cpp",
   "$ARKUI_UI_LITE_PATH/frameworks/components/ui_texture_mapper.cpp",
   "$ARKUI_UI_LITE_PATH/frameworks/components/ui_time_picker.cpp",
   "$ARKUI_UI_LITE_PATH/frameworks/components/ui_toggle_button.cpp",

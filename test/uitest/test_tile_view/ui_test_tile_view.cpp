@@ -19,6 +19,27 @@
 #include "components/ui_label_button.h"
 
 namespace OHOS {
+namespace {
+static constexpr int16_t TILE_VIEW_SIZE = 466;
+
+static UIView* CreateTileContent(const char* text, ColorType bgColor)
+{
+    UIViewGroup* tile = new UIViewGroup();
+    tile->SetStyle(STYLE_BACKGROUND_COLOR, bgColor.full);
+    tile->SetStyle(STYLE_BACKGROUND_OPA, OPA_OPAQUE);
+    // 设置圆角
+    tile->SetStyle(STYLE_BORDER_RADIUS, TILE_VIEW_SIZE/2);
+
+    UILabel* label = new UILabel();
+    label->SetText(text);
+    label->SetAlign(TEXT_ALIGNMENT_CENTER, TEXT_ALIGNMENT_CENTER);
+    label->SetPosition(0, TILE_VIEW_SIZE / 2 - 20, TILE_VIEW_SIZE, 40);
+    label->SetStyle(STYLE_TEXT_COLOR, Color::White().full);
+    tile->Add(label);
+
+    return tile;
+}
+} // namespace
 
 void UITestTileView::SetUp()
 {
@@ -45,123 +66,111 @@ const UIView* UITestTileView::GetTestView()
 
 void UITestTileView::UIKitTileViewTestDisplay001()
 {
-    if (container_ == nullptr) return;
+    if (container_ == nullptr) {
+        return;
+    }
 
     tileView_ = new UITileView();
-    int16_t screenW = 466;// Screen::GetInstance().GetWidth();
-    int16_t screenH = 466;
+    tileView_->SetPosition(0, 0, TILE_VIEW_SIZE, TILE_VIEW_SIZE);
+    tileView_->SetStyle(STYLE_BACKGROUND_COLOR, Color::Black().full);
+    tileView_->SetStyle(STYLE_BACKGROUND_OPA, OPA_OPAQUE);
 
-    tileView_->SetPosition(0, 0, screenW, screenH);
+    // Create 3x3 grid tiles - Row 0
+    // tileView_->AddTile(CreateTileContent("(0,0) Top-Left", Color::GetColorFromRGB(0x21, 0x96, 0xF3)), 0, 0);
+    tileView_->AddTile(CreateTileContent("(1,0) Top-Center", Color::GetColorFromRGB(0x4C, 0xAF, 0x50)), 1, 0);
+    // tileView_->AddTile(CreateTileContent("(2,0) Top-Right", Color::GetColorFromRGB(0xFF, 0x98, 0x00)), 2, 0);
 
-    // Watch Face Layout Demo
-    // (1,0) Control Panel (Top)
-    // (0,1) Left Card <-> (1,1) Watch Face <-> (2,1) Right Card
-    // (1,2) Notifications (Bottom)
+    // Row 1
+    tileView_->AddTile(CreateTileContent("(0,1) Left", Color::GetColorFromRGB(0x9C, 0x27, 0xB0)), 0, 1);
+    tileView_->AddTile(CreateTileContent("(1,1) Center", Color::GetColorFromRGB(0xF4, 0x43, 0x36)), 1, 1);
+    tileView_->AddTile(CreateTileContent("(2,1) Right", Color::GetColorFromRGB(0x00, 0xBC, 0xD4)), 2, 1);
+    tileView_->AddTile(CreateTileContent("(3,1) Right", Color::GetColorFromRGB(0x00, 0xBC, 0x09)), 3, 1);
 
-    int R = screenW / 2;
+    // Row 2
+    // tileView_->AddTile(CreateTileContent("(0,2) Bottom-Left", Color::GetColorFromRGB(0x79, 0x55, 0x48)), 0, 2);
+    tileView_->AddTile(CreateTileContent("(1,2) Bottom-Center", Color::GetColorFromRGB(0x60, 0x7D, 0x8B)), 1, 2);
+    // tileView_->AddTile(CreateTileContent("(2,2) Bottom-Right", Color::GetColorFromRGB(0xE9, 0x1E, 0x63)), 2, 2);
 
-    // 1. Control Panel (1,0)
-    {
-        UIViewGroup* view = new UIViewGroup();
-        view->Resize(screenW, screenH);
-        view->SetStyle(STYLE_BACKGROUND_COLOR, Color::Gray().full);
-        // view 设置圆角
-        view->SetStyle(STYLE_BORDER_RADIUS, R);
-        UILabel* label = new UILabel();
-        label->SetPosition(150, 150, 300, 50);
-        label->SetText("Control Panel (Drag Up)");
-        view->Add(label);
+    // Tile directions are automatically set based on neighbors:
+    // - (1,0) Top-Center: can drag DOWN, LEFT (no tile above or to the right)
+    // - (0,1) Left: can drag RIGHT, UP, DOWN (no tile to the left)
+    // - (1,1) Center: can drag in ALL directions (has neighbors on all sides)
+    // - (2,1) Right: can drag LEFT, UP, DOWN (has neighbor to the right at 3,1)
+    // - (3,1) Right-most: can drag LEFT, UP, DOWN (no tile to the right)
+    // - (1,2) Bottom-Center: can drag UP, LEFT (no tile below or to the right)
 
-        // Only allow dragging UP (to go back to Watch Face at 1,1)
-        tileView_->Add(view, 1, 0, UITileView::TDIR_TOP);
+    tileView_->SetLoopHorizontal(true);
+    tileView_->SetCurrentTile(1, 1, false);
+
+    tileView_->SetGlobalEnterEffect(UITileView::TDIR_ALL, UITileView::PAGE_EFFECT_SCALE_FADE);
+    tileView_->SetGlobalExitEffect(UITileView::TDIR_ALL, UITileView::PAGE_EFFECT_SCALE_FADE);
+    GRAPHIC_LOGD("Global Enter Effect: %d, %d, %d, %d", tileView_->globalEnterEffects_[0],
+    tileView_->globalEnterEffects_[1],
+    tileView_->globalEnterEffects_[2],
+    tileView_->globalEnterEffects_[3]);
+    GRAPHIC_LOGD("Global Exit Effect: %d, %d, %d, %d", tileView_->globalExitEffects_[0],
+    tileView_->globalExitEffects_[1],
+    tileView_->globalExitEffects_[2],
+    tileView_->globalExitEffects_[3]);
+
+    // (1,1) Center and (2,1) Right (0,1) Left
+    tileView_->SetTileEnterEffect(1, 1,
+        UITileView::TDIR_HOR,
+        UITileView::PAGE_EFFECT_STATIC_SCALE);
+    tileView_->SetTileExitEffect(1, 1,
+        UITileView::TDIR_HOR,
+        UITileView::PAGE_EFFECT_STATIC_SCALE);
+
+    tileView_->SetTileEnterEffect(0, 1,
+        UITileView::TDIR_RIGHT,
+        UITileView::PAGE_EFFECT_AUTO);
+    tileView_->SetTileExitEffect(0, 1,
+        UITileView::TDIR_LEFT,
+        UITileView::PAGE_EFFECT_AUTO);
+
+    tileView_->SetTileEnterEffect(2, 1,
+        UITileView::TDIR_LEFT,
+        UITileView::PAGE_EFFECT_AUTO);
+    tileView_->SetTileExitEffect(2, 1,
+        UITileView::TDIR_RIGHT,
+        UITileView::PAGE_EFFECT_AUTO);
+
+    // (1,1) Center and (1,0) Top (1,2) Bottom
+    tileView_->SetTileEnterEffect(1, 1,
+        UITileView::TDIR_VER,
+        UITileView::PAGE_EFFECT_STATIC);
+    tileView_->SetTileExitEffect(1, 1,
+        UITileView::TDIR_VER,
+        UITileView::PAGE_EFFECT_STATIC);
+
+    tileView_->SetTileEnterEffect(1, 0,
+        UITileView::TDIR_BOTTOM,
+        UITileView::PAGE_EFFECT_AUTO);
+    tileView_->SetTileExitEffect(1, 0,
+        UITileView::TDIR_TOP,
+        UITileView::PAGE_EFFECT_AUTO);
+
+    tileView_->SetTileEnterEffect(1, 2,
+        UITileView::TDIR_TOP,
+        UITileView::PAGE_EFFECT_AUTO);
+    tileView_->SetTileExitEffect(1, 2,
+        UITileView::TDIR_BOTTOM,
+        UITileView::PAGE_EFFECT_AUTO);
+#if 0
+    // 打印所有tile的enter和exit效果
+    for (uint16_t col = 0; col < tileView_->GetCols(); col++) {
+        for (uint16_t row = 0; row < tileView_->GetRows(); row++) {
+            GRAPHIC_LOGD("Tile (%d, %d) Enter Effect: %d, %d, %d, %d", col, row, tileView_->GetTileEnterEffect(col, row, UITileView::TDIR_LEFT),
+            tileView_->GetTileEnterEffect(col, row, UITileView::TDIR_RIGHT),
+            tileView_->GetTileEnterEffect(col, row, UITileView::TDIR_TOP),
+            tileView_->GetTileEnterEffect(col, row, UITileView::TDIR_BOTTOM));
+            GRAPHIC_LOGD("Tile (%d, %d) Exit Effect: %d, %d, %d, %d", col, row, tileView_->GetTileExitEffect(col, row, UITileView::TDIR_LEFT),
+            tileView_->GetTileExitEffect(col, row, UITileView::TDIR_RIGHT),
+            tileView_->GetTileExitEffect(col, row, UITileView::TDIR_TOP),
+            tileView_->GetTileExitEffect(col, row, UITileView::TDIR_BOTTOM));
+        }
     }
-
-    // 2. Notifications (1,2)
-    {
-        UIViewGroup* view = new UIViewGroup();
-        view->Resize(screenW, screenH);
-        view->SetStyle(STYLE_BACKGROUND_COLOR, Color::Maroon().full);
-        view->SetStyle(STYLE_BORDER_RADIUS, R);
-        UILabel* label = new UILabel();
-        label->SetPosition(150, 150, 300, 50);
-        label->SetText("Notifications (Drag Down)");
-        label->SetStyle(STYLE_TEXT_COLOR, Color::White().full);
-        view->Add(label);
-
-        // Only allow dragging DOWN (to go back to Watch Face at 1,1)
-        tileView_->Add(view, 1, 2, UITileView::TDIR_BOTTOM);
-    }
-
-    // 3. Watch Face (1,1) - Center
-    {
-        UIViewGroup* view = new UIViewGroup();
-        view->Resize(screenW, screenH);
-        view->SetStyle(STYLE_BACKGROUND_COLOR, Color::Orange().full); // Watch face usually black bg
-        view->SetStyle(STYLE_BORDER_RADIUS, R);
-
-        // Add a "Clock" (Simulated)
-        UILabel* time = new UILabel();
-        time->SetPosition(screenW/2 - 50, screenH/2 - 25, 100, 50);
-        time->SetText("12:00");
-        time->SetStyle(STYLE_TEXT_COLOR, Color::White().full);
-        time->SetAlign(TEXT_ALIGNMENT_CENTER, TEXT_ALIGNMENT_CENTER);
-        view->Add(time);
-
-        UILabel* label = new UILabel();
-        label->SetPosition(120, 120, 400, 50);
-        label->SetText("Watch Face (Center)");
-        label->SetStyle(STYLE_TEXT_COLOR, Color::Green().full);
-        view->Add(label);
-
-        // Allow all directions
-        tileView_->Add(view, 1, 1, UITileView::TDIR_ALL);
-
-        tileView_->SetTransitionEffect(1, 1, UITileView::TDIR_VER, &UITileView::defaultCoverTransition_);
-        tileView_->SetTransitionEffect(1, 1, UITileView::TDIR_HOR, &UITileView::defaultSlideTransition_);
-    }
-
-    // 4. Left Card (0,1)
-    {
-        UIViewGroup* view = new UIViewGroup();
-        view->Resize(screenW, screenH);
-        view->SetStyle(STYLE_BACKGROUND_COLOR, Color::Blue().full);
-        view->SetStyle(STYLE_BORDER_RADIUS, R);
-        UILabel* label = new UILabel();
-        label->SetPosition(150, 150, 300, 50);
-        label->SetText("Left Card (Weather)");
-        view->Add(label);
-
-        // Allow Horizontal dragging
-        tileView_->Add(view, 0, 1, UITileView::TDIR_HOR);
-
-        tileView_->SetTransitionEffect(0, 1, UITileView::TDIR_RIGHT, &UITileView::defaultSlideTransition_);
-        tileView_->SetTransitionEffect(0, 1, UITileView::TDIR_LEFT, &UITileView::defaultCoverTransition_);
-    }
-
-    // 5. Right Card (2,1)
-    {
-        UIViewGroup* view = new UIViewGroup();
-        view->Resize(screenW, screenH);
-        view->SetStyle(STYLE_BACKGROUND_COLOR, Color::Red().full);
-        view->SetStyle(STYLE_BORDER_RADIUS, R);
-
-        UILabel* label = new UILabel();
-        label->SetPosition(150, 150, 300, 50);
-        label->SetText("Right Card (Activity)");
-        view->Add(label);
-
-        // Allow Horizontal dragging
-        tileView_->Add(view, 2, 1, UITileView::TDIR_HOR);
-
-        tileView_->SetTransitionEffect(2, 1, UITileView::TDIR_LEFT, &UITileView::defaultSlideTransition_);
-        tileView_->SetTransitionEffect(2, 1, UITileView::TDIR_RIGHT, &UITileView::defaultCoverTransition_);
-    }
-
-    // Set Initial Tile to Watch Face (1,1)
-    tileView_->SetCurrentTile(1, 1, true);
-
-    // Enable Horizontal Loop (Cards loop), Disable Vertical Loop
-    tileView_->SetLoop(true, false);
+#endif
 
     container_->Add(tileView_);
 }

@@ -15,575 +15,1253 @@
 
 #include "components/ui_tile_view.h"
 #include "gfx_utils/graphic_log.h"
-#include <stdlib.h>
-#include <math.h>
+#include "securec.h"
+#if defined(ENABLE_ROTATE_INPUT) && ENABLE_ROTATE_INPUT
+#include "events/rotate_event.h"
+#endif
+#define VERBOSE 0
 
 namespace OHOS {
 
-UITileView::SlideTransition UITileView::defaultSlideTransition_;
-UITileView::CoverTransition UITileView::defaultCoverTransition_;
-
 UITileView::UITileView()
-    : curCol_(0), curRow_(0), maxCol_(0), maxRow_(0), loopHor_(false), loopVer_(false), isLoop_(false),
-      animator_(this, this, 250, false),
-      isDragging_(false),
-      lockHorizontal_(false),
-      targetX_(0), targetY_(0),
-      startX_(0), startY_(0),
-      contentX_(0), contentY_(0),
-      animSrcCol_(-1), animSrcRow_(-1),
-      pendingNextCol_(-1), pendingNextRow_(-1),
-      totalW_(0), totalH_(0),
-      easingFunc_(EasingEquation::QuintEaseOut)
+    : maxCols_(1),
+      maxRows_(1),
+      curCol_(0),
+      curRow_(0),
+      curView_(nullptr),
+      targetCol_(0),
+      targetRow_(0),
+      contentX_(0),
+      contentY_(0),
+      targetX_(0),
+      targetY_(0),
+      tileWidth_(0),
+      tileHeight_(0),
+      startValueX_(0),
+      endValueX_(0),
+      previousValueX_(0),
+      startValueY_(0),
+      endValueY_(0),
+      previousValueY_(0),
+      easingFunc_(EasingEquation::CubicEaseOut),
+      scrollAnimator_(this, this, 350, false),
+      direction_(TDIR_NONE),
+      deltaIndex_(0),
+      loopHor_(false),
+      loopVer_(false),
+      axisLocked_(false),
+      isHorizontalDrag_(true),
+      tileChangeListener_(nullptr),
+      transitionZIndexActive_(false),
+      transitionCurView_(nullptr),
+      transitionTargetView_(nullptr),
+      transitionCurZIndex_(0),
+      transitionTargetZIndex_(0),
+      enterEffect_(PAGE_EFFECT_AUTO),
+      exitEffect_(PAGE_EFFECT_AUTO),
+      oldDir_(0)
 {
+    isViewGroup_ = true;
     touchable_ = true;
     draggable_ = true;
+    dragParentInstead_ = false;
+
+    if (memset_s(tiles_, sizeof(tiles_), 0, sizeof(tiles_)) != EOK) {
+        GRAPHIC_LOGE("UITileView memset_s failed");
+    }
+    for (uint16_t i = 0; i < MAX_TILES; i++) {
+        tiles_[i].allowedDir = TDIR_NONE;
+        tiles_[i].view = nullptr;
+        for (uint8_t d = 0; d < 4; d++) {
+            tiles_[i].enterEffects[d] = PAGE_EFFECT_NONE;
+            tiles_[i].exitEffects[d] = PAGE_EFFECT_NONE;
+        }
+    }
+    easingFunc_ = EasingEquation::CubicEaseOut;
+    for (uint8_t d = 0; d < 4; d++) {
+        globalEnterEffects_[d] = PAGE_EFFECT_NONE;
+        globalExitEffects_[d] = PAGE_EFFECT_NONE;
+    }
+
+    ResetDragDelta();
 }
 
 UITileView::~UITileView()
 {
-    ListNode<TileInfo*>* node = tileList_.Begin();
-    while (node != tileList_.End()) {
-        TileInfo* info = node->data_;
-        node = node->next_;
-        delete info;
+    for (uint16_t i = 0; i < MAX_TILES; i++) {
+        tiles_[i].view = nullptr;
     }
-    tileList_.Clear();
 }
 
-void UITileView::Add(UIView* view)
+// ============================================================================
+// Tile Management
+// ============================================================================
+
+uint16_t UITileView::GetTileIndex(uint16_t col, uint16_t row) const
 {
-    Add(view, 0, 0);
+    if (col >= MAX_COLS || row >= MAX_ROWS) {
+        return MAX_TILES;
+    }
+    return row * MAX_COLS + col;
 }
 
-void UITileView::Add(UIView* view, uint8_t col, uint8_t row, uint8_t direction)
+void UITileView::ExpandGridIfNeeded(uint16_t col, uint16_t row)
 {
-    if (view == nullptr) {
+    if (col >= maxCols_) {
+        maxCols_ = col + 1;
+    }
+    if (row >= maxRows_) {
+        maxRows_ = row + 1;
+    }
+}
+
+void UITileView::AddTile(UIView* view, uint16_t col, uint16_t row)
+{
+    if (view == nullptr || col >= MAX_COLS || row >= MAX_ROWS) {
         return;
     }
 
-    TileInfo* info = new TileInfo();
-    if (info == nullptr) {
+    uint16_t index = GetTileIndex(col, row);
+    if (index >= MAX_TILES) {
         return;
     }
 
-    info->view = view;
-    info->col = col;
-    info->row = row;
-    info->direction = direction;
-    for (int i = 0; i < 4; i++) {
-        info->transitions[i] = &defaultSlideTransition_;
+    if (tiles_[index].view != nullptr) {
+        GRAPHIC_LOGE("AddTile: tile at (%d,%d) already exists", col, row);
+        return;
     }
-    tileList_.PushBack(info);
 
-    if (col > maxCol_) {
-        maxCol_ = col;
-    }
-    if (row > maxRow_) {
-        maxRow_ = row;
-    }
-    RecomputeTotalSpan();
+    ExpandGridIfNeeded(col, row);
 
     view->SetDragParentInstead(true);
-    view->SetTouchable(true);
-    view->SetDraggable(true);
     UIViewGroup::Add(view);
-    UpdateChildrenPosition();
+    tiles_[index].view = view;
+
+    UpdateTileAndNeighbors(col, row);
+
+#if VERBOSE
+    for (uint16_t i = 0; i < MAX_TILES; i++) {
+        if (tiles_[i].allowedDir != 0) {
+            GRAPHIC_LOGI("allowedDir[%d]=%u", i, tiles_[i].allowedDir);
+        }
+    }
+    GRAPHIC_LOGI("AddTile: col=%u, row=%u, index=%u", col, row, index);
+#endif
+    SetCurrentTile(col, row, false);
+    // LayoutTiles();
+    Invalidate();
 }
 
-void UITileView::SetCurrentTile(uint8_t col, uint8_t row, bool animate)
+void UITileView::RemoveTile(uint16_t col, uint16_t row)
 {
-    uint32_t width = static_cast<uint32_t>(GetWidth());
-    uint32_t height = static_cast<uint32_t>(GetHeight());
-
-    targetX_ = -static_cast<int>(col) * static_cast<int>(width);
-    targetY_ = -static_cast<int>(row) * static_cast<int>(height);
-
-    if (loopHor_) {
-        int totalW = static_cast<int>(totalW_);
-        if (totalW > 0) {
-            int diff = targetX_ - contentX_;
-            while (diff > totalW / 2) { targetX_ -= totalW; diff -= totalW; }
-            while (diff < -totalW / 2) { targetX_ += totalW; diff += totalW; }
-        }
-    }
-    if (loopVer_) {
-        int totalH = static_cast<int>(totalH_);
-        if (totalH > 0) {
-            int diff = targetY_ - contentY_;
-            while (diff > totalH / 2) { targetY_ -= totalH; diff -= totalH; }
-            while (diff < -totalH / 2) { targetY_ += totalH; diff += totalH; }
-        }
+    uint16_t index = GetTileIndex(col, row);
+    if (index >= MAX_TILES || tiles_[index].view == nullptr) {
+        return;
     }
 
-    if (animate) {
-        pendingNextCol_ = static_cast<int>(col);
-        pendingNextRow_ = static_cast<int>(row);
-        startX_ = contentX_;
-        startY_ = contentY_;
-        animator_.Start();
+    UIViewGroup::Remove(tiles_[index].view);
+    tiles_[index].view = nullptr;
+
+    UpdateTileAndNeighbors(col, row);
+    Invalidate();
+}
+
+UITileView::TileInfo* UITileView::GetTile(uint16_t col, uint16_t row)
+{
+    uint16_t index = GetTileIndex(col, row);
+    if (index >= MAX_TILES || tiles_[index].view == nullptr) { // TODO: check if it is safe to return nullptr
+        return nullptr;
+    }
+    return &tiles_[index];
+}
+
+UIView* UITileView::GetTileView(uint16_t col, uint16_t row)
+{
+    TileInfo* tile = GetTile(col, row);
+    if (tile == nullptr) {
+        return nullptr;
+    }
+    return tile->view;
+}
+
+bool UITileView::HasTile(uint16_t col, uint16_t row) const
+{
+    uint16_t index = GetTileIndex(col, row);
+    if (index >= MAX_TILES || tiles_[index].view == nullptr) {
+        return false;
+    }
+    return true;
+}
+
+// ============================================================================
+// Direction Management
+// ============================================================================
+
+void UITileView::SetValidDirection(uint16_t col, uint16_t row, uint8_t direction)
+{
+    uint16_t index = GetTileIndex(col, row);
+    if (index >= MAX_TILES) {
+        return;
+    }
+    tiles_[index].allowedDir = direction;
+}
+
+uint8_t UITileView::GetValidDirection(uint16_t col, uint16_t row) const
+{
+    uint16_t index = GetTileIndex(col, row);
+    if (index >= MAX_TILES) {
+        return TDIR_NONE;
+    }
+    return tiles_[index].allowedDir;
+}
+
+void UITileView::SetInvalidDirection(uint16_t col, uint16_t row, uint8_t direction)
+{
+    uint16_t index = GetTileIndex(col, row);
+    if (index >= MAX_TILES) {
+        return;
+    }
+    tiles_[index].allowedDir = tiles_[index].allowedDir & (~direction);
+}
+
+uint8_t UITileView::GetInvalidDirection(uint16_t col, uint16_t row) const
+{
+    uint16_t index = GetTileIndex(col, row);
+    if (index >= MAX_TILES) {
+        return TDIR_ALL;
+    }
+    return TDIR_ALL & (~tiles_[index].allowedDir);
+}
+
+uint8_t UITileView::GetAllowedDirection(uint16_t col, uint16_t row) const
+{
+    uint16_t index = GetTileIndex(col, row);
+    if (index >= MAX_TILES) {
+        return TDIR_NONE;
+    }
+    return tiles_[index].allowedDir;
+}
+
+void UITileView::UpdateTileDirection(uint16_t col, uint16_t row)
+{
+    if (!HasTile(col, row)) {
+        return;
+    }
+
+    uint8_t allowed = TDIR_NONE;
+
+    // Check right neighbor (allows dragging LEFT)
+    bool hasRight = false;
+    if (col < maxCols_ - 1) {
+        hasRight = HasTile(col + 1, row);
+    } else if (loopHor_ && maxCols_ > 1) {
+        hasRight = HasTile(0, row);
+    }
+    if (hasRight) {
+        allowed |= TDIR_LEFT;
+    }
+
+    // Check left neighbor (allows dragging RIGHT)
+    bool hasLeft = false;
+    if (col > 0) {
+        hasLeft = HasTile(col - 1, row);
+    } else if (loopHor_ && maxCols_ > 1) {
+        hasLeft = HasTile(maxCols_ - 1, row);
+    }
+    if (hasLeft) {
+        allowed |= TDIR_RIGHT;
+    }
+
+    // Check bottom neighbor (allows dragging UP/TOP)
+    bool hasBottom = false;
+    if (row < maxRows_ - 1) {
+        hasBottom = HasTile(col, row + 1);
+    } else if (loopVer_ && maxRows_ > 1) {
+        hasBottom = HasTile(col, 0);
+    }
+    if (hasBottom) {
+        allowed |= TDIR_TOP;
+    }
+
+    // Check top neighbor (allows dragging DOWN/BOTTOM)
+    bool hasTop = false;
+    if (row > 0) {
+        hasTop = HasTile(col, row - 1);
+    } else if (loopVer_ && maxRows_ > 1) {
+        hasTop = HasTile(col, maxRows_ - 1);
+    }
+    if (hasTop) {
+        allowed |= TDIR_BOTTOM;
+    }
+
+    SetValidDirection(col, row, allowed);
+}
+
+void UITileView::UpdateNeighborTile(uint16_t col, uint16_t row, int16_t deltaCol, int16_t deltaRow, bool isHorizontal)
+{
+    int16_t neighborCol = col + deltaCol;
+    int16_t neighborRow = row + deltaRow;
+
+    if (isHorizontal) {
+        if (neighborCol < 0 || neighborCol >= static_cast<int16_t>(maxCols_)) {
+            if (loopHor_ && maxCols_ > 1) {
+                neighborCol = (neighborCol + maxCols_) % maxCols_;
+            } else {
+                return;
+            }
+        }
+    } else {
+        if (neighborRow < 0 || neighborRow >= static_cast<int16_t>(maxRows_)) {
+            if (loopVer_ && maxRows_ > 1) {
+                neighborRow = (neighborRow + maxRows_) % maxRows_;
+            } else {
+                return;
+            }
+        }
+    }
+
+    UpdateTileDirection(static_cast<uint16_t>(neighborCol), static_cast<uint16_t>(neighborRow));
+}
+
+void UITileView::UpdateTileAndNeighbors(uint16_t col, uint16_t row)
+{
+    UpdateTileDirection(col, row);
+    UpdateNeighborTile(col, row, -1, 0, true);  // Left
+    UpdateNeighborTile(col, row, 1, 0, true);   // Right
+    UpdateNeighborTile(col, row, 0, -1, false); // Top
+    UpdateNeighborTile(col, row, 0, 1, false);  // Bottom
+}
+
+void UITileView::UpdateAllTileDirections()
+{
+    for (uint16_t row = 0; row < maxRows_; row++) {
+        for (uint16_t col = 0; col < maxCols_; col++) {
+            UpdateTileDirection(col, row);
+        }
+    }
+}
+
+void UITileView::SetLoopHorizontal(bool loop)
+{
+    loopHor_ = loop;
+    UpdateAllTileDirections();
+}
+
+void UITileView::SetLoopVertical(bool loop)
+{
+    loopVer_ = loop;
+    UpdateAllTileDirections();
+}
+
+// ============================================================================
+// Layout and Positioning
+// ============================================================================
+
+int16_t UITileView::NormalizeOffsetLoop(int16_t pos, int16_t itemSize, uint16_t count) const
+{
+    if (count <= 1 || itemSize == 0) {
+        return pos;
+    }
+
+    int32_t grid = static_cast<int32_t>(itemSize) * static_cast<int32_t>(count);
+    int32_t threshold = grid - itemSize;
+
+    if (pos < -threshold) {
+        pos += grid;
+    } else if (pos > threshold) {
+        pos -= grid;
+    }
+
+    return pos;
+}
+
+int16_t UITileView::NormalizeContentLoop(int16_t pos, int16_t itemSize, uint16_t count) const
+{
+    if (count <= 1 || itemSize == 0) {
+        return pos;
+    }
+
+    int32_t grid = static_cast<int32_t>(itemSize) * static_cast<int32_t>(count);
+    int32_t threshold = grid - itemSize;
+
+    if (pos < -threshold) {
+        pos += grid;
+    } else if (pos > 0) {
+        pos -= grid;
+    }
+
+    return pos;
+}
+
+void UITileView::LayoutTiles()
+{
+    int16_t tileWidth = tileWidth_;
+    int16_t tileHeight = tileHeight_;
+
+    for (uint16_t row = 0; row < maxRows_; row++) {
+        for (uint16_t col = 0; col < maxCols_; col++) {
+            uint16_t index = GetTileIndex(col, row);
+            if (index < MAX_TILES && tiles_[index].view != nullptr) {
+                int16_t x = contentX_ + col * tileWidth;
+                int16_t y = contentY_ + row * tileHeight;
+
+                if (loopHor_ && maxCols_ > 1) {
+                    x = NormalizeOffsetLoop(x, tileWidth, maxCols_);
+                }
+                if (loopVer_ && maxRows_ > 1) {
+                    y = NormalizeOffsetLoop(y, tileHeight, maxRows_);
+                }
+
+                tiles_[index].view->SetPosition(x, y, tileWidth, tileHeight);
+            }
+        }
+    }
+    ResetEffect();
+    ApplyTransitionEffect();
+}
+
+static uint8_t GetDirectionIndex(uint8_t direction)
+{
+    if (direction == UITileView::TDIR_LEFT) {
+        return 0;
+    }
+    if (direction == UITileView::TDIR_RIGHT) {
+        return 1;
+    }
+    if (direction == UITileView::TDIR_TOP) {
+        return 2;
+    }
+    if (direction == UITileView::TDIR_BOTTOM) {
+        return 3;
+    }
+    return 0;
+}
+
+void UITileView::SetTileEnterEffect(uint16_t col, uint16_t row, uint8_t directionMask, PageEffectType effect)
+{
+    TileInfo* tile = GetTile(col, row);
+    if (tile == nullptr) {
+        return;
+    }
+
+    for (uint8_t d = 0; d < 4; d++) {
+        uint8_t dirFlag = 0;
+        if (d == 0) {
+            dirFlag = TDIR_LEFT;
+        } else if (d == 1) {
+            dirFlag = TDIR_RIGHT;
+        } else if (d == 2) {
+            dirFlag = TDIR_TOP;
+        } else {
+            dirFlag = TDIR_BOTTOM;
+        }
+        if (directionMask & dirFlag) {
+            tile->enterEffects[d] = effect;
+        } else {
+            // tile->enterEffects[d] = PAGE_EFFECT_NONE;
+        }
+    }
+}
+
+void UITileView::SetTileExitEffect(uint16_t col, uint16_t row, uint8_t directionMask, PageEffectType effect)
+{
+    TileInfo* tile = GetTile(col, row);
+    if (tile == nullptr) {
+        return;
+    }
+    for (uint8_t d = 0; d < 4; d++) {
+        uint8_t dirFlag = 0;
+        if (d == 0) {
+            dirFlag = TDIR_LEFT;
+        } else if (d == 1) {
+            dirFlag = TDIR_RIGHT;
+        } else if (d == 2) {
+            dirFlag = TDIR_TOP;
+        } else {
+            dirFlag = TDIR_BOTTOM;
+        }
+        if (directionMask & dirFlag) {
+            tile->exitEffects[d] = effect;
+        } else {
+            // tile->exitEffects[d] = PAGE_EFFECT_NONE;
+        }
+    }
+}
+
+UITileView::PageEffectType UITileView::GetTileEnterEffect(uint16_t col, uint16_t row, uint8_t direction)
+{
+    TileInfo* tile = GetTile(col, row);
+    if (tile == nullptr) {
+        return PAGE_EFFECT_NONE;
+    }
+    uint8_t dirIndex = GetDirectionIndex(direction);
+    PageEffectType effect = tile->enterEffects[dirIndex];
+    if (effect != PAGE_EFFECT_NONE) {
+        return effect;
+    }
+    PageEffectType globalEffect = globalEnterEffects_[dirIndex];
+    return globalEffect;
+}
+
+UITileView::PageEffectType UITileView::GetTileExitEffect(uint16_t col, uint16_t row, uint8_t direction)
+{
+    TileInfo* tile = GetTile(col, row);
+    if (tile == nullptr) {
+        return PAGE_EFFECT_NONE;
+    }
+    uint8_t dirIndex = GetDirectionIndex(direction);
+    PageEffectType effect = tile->exitEffects[dirIndex];
+    if (effect != PAGE_EFFECT_NONE) {
+        return effect;
+    }
+    PageEffectType globalEffect = globalExitEffects_[dirIndex];
+    return globalEffect;
+}
+
+void UITileView::SetGlobalEnterEffect(uint8_t directionMask, PageEffectType effect)
+{
+    for (uint8_t d = 0; d < 4; d++) {
+        uint8_t dirFlag = 0;
+        if (d == 0) {
+            dirFlag = TDIR_LEFT;
+        } else if (d == 1) {
+            dirFlag = TDIR_RIGHT;
+        } else if (d == 2) {
+            dirFlag = TDIR_TOP;
+        } else {
+            dirFlag = TDIR_BOTTOM;
+        }
+        if (directionMask & dirFlag) {
+            globalEnterEffects_[d] = effect;
+        } else {
+            globalEnterEffects_[d] = PAGE_EFFECT_NONE;
+        }
+    }
+}
+
+void UITileView::SetGlobalExitEffect(uint8_t directionMask, PageEffectType effect)
+{
+    for (uint8_t d = 0; d < 4; d++) {
+        uint8_t dirFlag = 0;
+        if (d == 0) {
+            dirFlag = TDIR_LEFT;
+        } else if (d == 1) {
+            dirFlag = TDIR_RIGHT;
+        } else if (d == 2) {
+            dirFlag = TDIR_TOP;
+        } else {
+            dirFlag = TDIR_BOTTOM;
+        }
+        if (directionMask & dirFlag) {
+            globalExitEffects_[d] = effect;
+        } else {
+            globalExitEffects_[d] = PAGE_EFFECT_NONE;
+        }
+    }
+}
+
+UITileView::TransitionConfig UITileView::GetTransitionConfig(PageEffectType type) const
+{
+    TransitionConfig config = {false, false};
+    switch (type) {
+        case PAGE_EFFECT_SCALE:
+            config.enableScale = true;
+            break;
+        case PAGE_EFFECT_FADE:
+            config.enableFade = true;
+            break;
+        case PAGE_EFFECT_SCALE_FADE:
+            config.enableScale = true;
+            config.enableFade = true;
+            break;
+        case PAGE_EFFECT_COVER:
+            config.enableScale = true;
+            break;
+        case PAGE_EFFECT_AUTO:
+        case PAGE_EFFECT_NONE:
+        default:
+            break;
+    }
+    return config;
+}
+
+bool UITileView::IsCoverLikeEffect(PageEffectType effect) const
+{
+    return (effect == PAGE_EFFECT_STATIC) || (effect == PAGE_EFFECT_STATIC_SCALE);
+}
+
+void UITileView::RestoreTransitionZIndex()
+{
+    if (!transitionZIndexActive_) {
+        return;
+    }
+    if (transitionCurView_ != nullptr) {
+        transitionCurView_->SetZIndex(transitionCurZIndex_);
+    }
+    if (transitionTargetView_ != nullptr) {
+        transitionTargetView_->SetZIndex(transitionTargetZIndex_);
+    }
+    transitionZIndexActive_ = false;
+    transitionCurView_ = nullptr;
+    transitionTargetView_ = nullptr;
+}
+
+void UITileView::UpdateTransitionZIndex(UIView* curView,
+                                       UIView* targetView,
+                                       PageEffectType curEffect,
+                                       PageEffectType targetEffect)
+{
+    if ((curView == nullptr) || (targetView == nullptr) || (curView == targetView)) {
+        RestoreTransitionZIndex();
+        return;
+    }
+    GRAPHIC_LOGD("%s: %p, %p, %d, %d", __func__, curView, targetView, curEffect, targetEffect);
+
+    bool curStatic = IsCoverLikeEffect(curEffect);
+    bool targetStatic = IsCoverLikeEffect(targetEffect);
+    if (curStatic == targetStatic) {
+        RestoreTransitionZIndex();
+        return;
+    }
+
+    if (transitionZIndexActive_ && ((transitionCurView_ != curView) || (transitionTargetView_ != targetView))) {
+        RestoreTransitionZIndex();
+    }
+
+    if (!transitionZIndexActive_) {
+        transitionCurView_ = curView;
+        transitionTargetView_ = targetView;
+        transitionCurZIndex_ = curView->GetZIndex();
+        transitionTargetZIndex_ = targetView->GetZIndex();
+        transitionZIndexActive_ = true;
+    }
+
+    UIView* topView = nullptr;
+    UIView* bottomView = nullptr;
+    if (curStatic) {
+        bottomView = curView;
+        topView = targetView;
+        GRAPHIC_LOGD("%s: %p, %p topView is targetView", __func__, bottomView, topView);
+    } else {
+        bottomView = targetView;
+        topView = curView;
+        GRAPHIC_LOGD("%s: %p, %p topView is curView", __func__, bottomView, topView);
+    }
+
+    int32_t base = MATH_MIN(transitionCurZIndex_, transitionTargetZIndex_);
+    int16_t topZIndex = 0;
+    int16_t bottomZIndex = 0;
+    if (base >= 32767) {
+        topZIndex = 32767;
+        bottomZIndex = 32766;
+    } else {
+        bottomZIndex = static_cast<int16_t>(base);
+        topZIndex = static_cast<int16_t>(base + 1);
+    }
+    GRAPHIC_LOGD("%s: %d, %d", __func__, bottomZIndex, topZIndex);
+    bottomView->SetZIndex(bottomZIndex);
+    topView->SetZIndex(topZIndex);
+}
+
+void UITileView::UpdateDirAndZIndex()
+{
+    GRAPHIC_LOGD("%s", __func__);
+    if (curView_ == nullptr) {
+        return;
+    }
+    if (direction_ & TDIR_HOR) {
+        int curX = curView_->GetX();
+        UpdateDirAndZIndex(curX);
+    } else if (direction_ & TDIR_VER) {
+        int curY = curView_->GetY();
+        UpdateDirAndZIndex(curY);
+    } else {
+        return;
+    }
+}
+
+bool UITileView::ShouldUpdateDir(int16_t pos)
+{
+    int8_t dir = 0;
+    if (pos < 0) {
+        dir = -1;
+    } else if (pos > 0) {
+        dir = 1;
+    }
+    if ((dir != 0) && (dir != oldDir_)) {
+        oldDir_ = dir;
+        return true;
+    }
+    return false;
+}
+
+void UITileView::ResetDragDelta()
+{
+    for (uint8_t i = 0; i < 3; i++) {
+        lastDelta_[i] = 0;
+    }
+    deltaIndex_ = 0;
+}
+
+int16_t UITileView::GetMaxAbsLastDelta() const
+{
+    int16_t maxDelta = 0;
+    for (uint8_t i = 0; i < 3; i++) {
+        int16_t absDelta = MATH_ABS(lastDelta_[i]);
+        if (maxDelta < absDelta) {
+            maxDelta = absDelta;
+        }
+    }
+    return maxDelta;
+}
+
+void UITileView::UpdateLastDelta(int16_t delta)
+{
+    lastDelta_[deltaIndex_ % 3] = delta;
+    deltaIndex_ = (deltaIndex_ + 1) % 3;
+}
+
+bool UITileView::GetTransitionEnterInfo(int16_t pos,
+                                       uint16_t& enterCol,
+                                       uint16_t& enterRow,
+                                       uint8_t& effectiveDirection) const
+{
+    enterCol = curCol_;
+    enterRow = curRow_;
+    effectiveDirection = TDIR_NONE;
+
+    if (pos == 0) {
+        return false;
+    }
+
+    if (direction_ & TDIR_HOR) {
+        if (pos < 0) {
+            effectiveDirection = TDIR_LEFT;
+            enterCol = static_cast<uint16_t>(NormalizeIndex(static_cast<int16_t>(curCol_) + 1,
+                                                           static_cast<int16_t>(maxCols_),
+                                                           loopHor_));
+            return true;
+        }
+        if (pos > 0) {
+            effectiveDirection = TDIR_RIGHT;
+            enterCol = static_cast<uint16_t>(NormalizeIndex(static_cast<int16_t>(curCol_) - 1,
+                                                           static_cast<int16_t>(maxCols_),
+                                                           loopHor_));
+            return true;
+        }
+        return false;
+    }
+
+    else if (direction_ & TDIR_VER) {
+        if (pos < 0) {
+            effectiveDirection = TDIR_TOP;
+            enterRow = static_cast<uint16_t>(NormalizeIndex(static_cast<int16_t>(curRow_) + 1,
+                                                           static_cast<int16_t>(maxRows_),
+                                                           loopVer_));
+            return true;
+        }
+        if (pos > 0) {
+            effectiveDirection = TDIR_BOTTOM;
+            enterRow = static_cast<uint16_t>(NormalizeIndex(static_cast<int16_t>(curRow_) - 1,
+                                                           static_cast<int16_t>(maxRows_),
+                                                           loopVer_));
+            return true;
+        }
+        return false;
+    }
+
+    return false;
+}
+
+bool UITileView::GetOnScreenTransitionViews(UIView*& exitView,
+                                            UIView*& enterView,
+                                            uint16_t& enterCol,
+                                            uint16_t& enterRow,
+                                            uint8_t& effectiveDirection)
+{
+    exitView = curView_;
+    enterView = nullptr;
+    enterCol = curCol_;
+    enterRow = curRow_;
+    effectiveDirection = TDIR_NONE;
+    int16_t pos = 0;
+    float fullSize = 0.0f;
+
+    if (exitView == nullptr || tileWidth_ == 0 || tileHeight_ == 0) {
+        return false;
+    }
+
+    if (direction_ & TDIR_HOR) {
+        pos = exitView->GetX();
+        fullSize = static_cast<float>(tileWidth_);
+    } else if (direction_ & TDIR_VER) {
+        pos = exitView->GetY();
+        fullSize = static_cast<float>(tileHeight_);
+    } else {
+        return false;
+    }
+
+    if (pos < -fullSize || pos > fullSize || pos == 0) {
+        return false;
+    }
+
+    if (!GetTransitionEnterInfo(pos, enterCol, enterRow, effectiveDirection)) {
+        return false;
+    }
+
+    enterView = GetTileView(enterCol, enterRow);
+    if (enterView == nullptr || enterView == exitView) {
+        enterView = nullptr;
+        return false;
+    }
+    return true;
+}
+
+void UITileView::UpdateDirAndZIndex(int pos)
+{
+    if (pos == 0) {
+        return;
+    }
+    GRAPHIC_LOGD("%s: %d, %d, %d", __func__, curCol_, curRow_, direction_);
+
+    uint16_t enterCol = curCol_;
+    uint16_t enterRow = curRow_;
+    uint8_t effectiveDirection = TDIR_NONE;
+    if (!GetTransitionEnterInfo(pos, enterCol, enterRow, effectiveDirection)) {
+        return;
+    }
+
+    direction_ = effectiveDirection;
+
+    UIView* targetView = GetTileView(enterCol, enterRow);
+    if (targetView == nullptr) {
+        return;
+    }
+
+    enterEffect_ = GetTileEnterEffect(enterCol, enterRow, direction_);
+    exitEffect_  = GetTileExitEffect(curCol_, curRow_, direction_);
+    UpdateTransitionZIndex(curView_, targetView, exitEffect_, enterEffect_);
+}
+
+void UITileView::DoTransition(UIView* curView,
+                              UIView* targetView,
+                              PageEffectType curEffect,
+                              PageEffectType targetEffect,
+                              uint8_t direction)
+{
+    if (curView == nullptr || targetView == nullptr) {
+        return;
+    }
+    // GRAPHIC_LOGD("%s: direction=%d", __func__, direction);
+    int16_t curPos = 0;
+    int16_t targetPos = 0;
+    float fullSize = 0.0f;
+    if (direction & TDIR_HOR) {
+        targetPos = targetView->GetX();
+        curPos = curView->GetX();
+        fullSize = static_cast<float>(tileWidth_);
+    } else {
+        targetPos = targetView->GetY();
+        curPos = curView->GetY();
+        fullSize = static_cast<float>(tileHeight_);
+    }
+
+    float ratio = static_cast<float>(curPos) / fullSize;
+    float absRatio = MATH_ABS(ratio);
+
+    float targetRatio = 0.0f;
+    if (ratio < 0) {
+        targetRatio = ratio + 1.0f;
+    } else {
+        targetRatio = ratio - 1.0f;
+    }
+    float targetAbsRatio = MATH_ABS(targetRatio);
+
+    GRAPHIC_LOGD(" %f %f", ratio, targetRatio);
+
+    curView->ResetTransParameter();
+    targetView->ResetTransParameter();
+
+    // 1. Current Tile (Exiting)
+    switch (curEffect) {
+        case PAGE_EFFECT_SCALE:
+        {
+            GRAPHIC_LOGD("Current Tile PAGE_EFFECT_SCALE: pos=%d", curPos);
+            float minScale = 0.5f;
+            float scale = minScale + (1.0f - minScale) * (1.0f - absRatio);
+            float pivotX = fullSize * 0.5f;
+            float pivotY = fullSize * 0.5f;
+            curView->Scale(Vector2<float>(scale, scale), Vector2<float>(pivotX, pivotY));
+            break;
+        }
+
+        case PAGE_EFFECT_FADE:
+        {
+            GRAPHIC_LOGD("Current Tile PAGE_EFFECT_FADE: pos=%d", curPos);
+            float minFactor = 0.3f;
+            float factor = minFactor + (1.0f - minFactor) * (1.0f - absRatio);
+            curView->SetOpaScale(static_cast<uint8_t>(factor * OPA_OPAQUE));
+            break;
+        }
+        case PAGE_EFFECT_STATIC:
+        {
+            // GRAPHIC_LOGD("Current Tile PAGE_EFFECT_COVER: pos=%d", curPos);
+            int16_t offsetX = 0;
+            int16_t offsetY = 0;
+            if (direction & TDIR_HOR) {
+                offsetX = -curPos;
+            } else {
+                offsetY = -curPos;
+            }
+            curView->Translate(Vector2<int16_t>(offsetX, offsetY));
+            break;
+        }
+        case PAGE_EFFECT_STATIC_SCALE:
+        {
+            // GRAPHIC_LOGD("Current Tile PAGE_EFFECT_STATIC_SCALE: pos=%d", curPos);
+            float minScale = 0.8f;
+            float scale = minScale + (1.0f - minScale) * (1.0f - absRatio);
+            float pivotX = fullSize * 0.5f;
+            float pivotY = fullSize * 0.5f;
+            curView->Scale(Vector2<float>(scale, scale), Vector2<float>(pivotX, pivotY));
+
+            int16_t offsetX = 0;
+            int16_t offsetY = 0;
+            if (direction & TDIR_HOR) {
+                offsetX = -curPos;
+            } else {
+                offsetY = -curPos;
+            }
+            curView->Translate(Vector2<int16_t>(offsetX, offsetY));
+            break;
+        }
+        case PAGE_EFFECT_SCALE_FADE:
+        {
+            GRAPHIC_LOGD("Current Tile PAGE_EFFECT_SCALE_FADE: pos=%d", curPos);
+            float minScale = 0.8f;
+            float scale = minScale + (1.0f - minScale) * (1.0f - absRatio);
+            float pivotX = fullSize * 0.5f;
+            float pivotY = fullSize * 0.5f;
+            curView->Scale(Vector2<float>(scale, scale), Vector2<float>(pivotX, pivotY));
+
+            float minFactor = 0.3f;
+            float factor = minFactor + (1.0f - minFactor) * (1.0f - absRatio);
+            curView->SetOpaScale(static_cast<uint8_t>(factor * OPA_OPAQUE));
+            break;
+        }
+        case PAGE_EFFECT_AUTO:
+            GRAPHIC_LOGD("Current Tile PAGE_EFFECT_AUTO: pos=%d", curPos);
+        default:
+            break;
+    }
+
+    // 2. Target Tile (Entering)
+    switch (targetEffect) {
+        case PAGE_EFFECT_SCALE:
+        {
+            GRAPHIC_LOGD("Target Tile PAGE_EFFECT_SCALE: pos=%d", targetPos);
+            float minScale = 0.5f;
+            float scale = minScale + (1.0f - minScale) * (1.0f - targetAbsRatio);
+            float pivotX = fullSize * 0.5f;
+            float pivotY = fullSize * 0.5f;
+            targetView->Scale(Vector2<float>(scale, scale), Vector2<float>(pivotX, pivotY));
+            break;
+        }
+        case PAGE_EFFECT_FADE:
+        {
+            GRAPHIC_LOGD("Target Tile PAGE_EFFECT_FADE: pos=%d", targetPos);
+            float minFactor = 0.3f;
+            float factor = minFactor + (1.0f - minFactor) * (1.0f - targetAbsRatio);
+            targetView->SetOpaScale(static_cast<uint8_t>(factor * OPA_OPAQUE));
+            break;
+        }
+        case PAGE_EFFECT_STATIC:
+        {
+            // GRAPHIC_LOGD("Target Tile PAGE_EFFECT_COVER: pos=%d", targetPos);
+            int16_t offsetX = 0;
+            int16_t offsetY = 0;
+            if (direction & TDIR_HOR) {
+                offsetX = -targetPos;
+            } else {
+                offsetY = -targetPos;
+            }
+            targetView->Translate(Vector2<int16_t>(offsetX, offsetY));
+            break;
+        }
+        case PAGE_EFFECT_STATIC_SCALE:
+        {
+            // GRAPHIC_LOGD("Target Tile PAGE_EFFECT_STATIC_SCALE: pos=%d", targetPos);
+            float minScale = 0.8f;
+            float scale = minScale + (1.0f - minScale) * (1.0f - targetAbsRatio);
+            float pivotX = fullSize * 0.5f;
+            float pivotY = fullSize * 0.5f;
+            targetView->Scale(Vector2<float>(scale, scale), Vector2<float>(pivotX, pivotY));
+
+            int16_t offsetX = 0;
+            int16_t offsetY = 0;
+            if (direction & TDIR_HOR) {
+                offsetX = -targetPos;
+            } else {
+                offsetY = -targetPos;
+            }
+            targetView->Translate(Vector2<int16_t>(offsetX, offsetY));
+            break;
+        }
+        case PAGE_EFFECT_SCALE_FADE:
+        {
+            GRAPHIC_LOGD("Target Tile PAGE_EFFECT_SCALE_FADE: pos=%d", targetPos);
+            float minScale = 0.8f;
+            float scale = minScale + (1.0f - minScale) * (1.0f - targetAbsRatio);
+            float pivotX = fullSize * 0.5f;
+            float pivotY = fullSize * 0.5f;
+            targetView->Scale(Vector2<float>(scale, scale), Vector2<float>(pivotX, pivotY));
+
+            float minFactor = 0.3f;
+            float factor = minFactor + (1.0f - minFactor) * (1.0f - targetAbsRatio);
+            targetView->SetOpaScale(static_cast<uint8_t>(factor * OPA_OPAQUE));
+            break;
+        }
+        case PAGE_EFFECT_AUTO:
+            GRAPHIC_LOGD("Target Tile PAGE_EFFECT_AUTO: pos=%d", targetPos);
+        default:
+            break;
+    }
+}
+
+void UITileView::ApplyTransitionEffect()
+{
+    if (curView_ == nullptr || tileWidth_ == 0 || tileHeight_ == 0) {
+        return;
+    }
+
+    UIView* exitView = nullptr;
+    UIView* enterView = nullptr;
+    uint16_t enterCol = curCol_;
+    uint16_t enterRow = curRow_;
+    uint8_t effectiveDirection = TDIR_NONE;
+    if (!GetOnScreenTransitionViews(exitView, enterView, enterCol, enterRow, effectiveDirection)) {
+        return;
+    }
+
+    PageEffectType enterEffect = GetTileEnterEffect(enterCol, enterRow, effectiveDirection);
+    PageEffectType exitEffect = GetTileExitEffect(curCol_, curRow_, effectiveDirection);
+    DoTransition(exitView, enterView, exitEffect, enterEffect, effectiveDirection);
+}
+
+// ============================================================================
+// Navigation and Animation
+// ============================================================================
+
+int16_t UITileView::NormalizeIndex(int16_t index, int16_t max, bool loop) const
+{
+    if (loop) {
+        index = ((index % max) + max) % max;
+    } else {
+        if (index < 0) {
+            index = 0;
+        } else if (index >= max) {
+            index = max - 1;
+        }
+    }
+    return index;
+}
+
+void UITileView::SetCurrentTile(uint16_t col, uint16_t row, bool needAnimator)
+{
+    if (col >= maxCols_ || row >= maxRows_) {
+        return;
+    }
+    SwitchToTile(col, row, needAnimator);
+    Invalidate();
+}
+
+void UITileView::SwitchToTile(uint16_t targetCol, uint16_t targetRow, bool needAnimator)
+{
+    if (targetCol >= maxCols_ || targetRow >= maxRows_) {
+        return;
+    }
+
+    int16_t tileWidth = tileWidth_;
+    int16_t tileHeight = tileHeight_;
+    int32_t baseX = -static_cast<int32_t>(targetCol) * tileWidth;
+    int32_t baseY = -static_cast<int32_t>(targetRow) * tileHeight;
+
+    // Handle loop wrapping for shortest path
+    if (loopHor_ && maxCols_ > 1) {
+        if (curCol_ == 0 && targetCol == maxCols_ - 1) {
+            baseX = tileWidth;
+        } else if (curCol_ == maxCols_ - 1 && targetCol == 0) {
+            baseX = -static_cast<int32_t>(maxCols_) * tileWidth;
+        }
+    }
+
+    if (loopVer_ && maxRows_ > 1) {
+        if (curRow_ == 0 && targetRow == maxRows_ - 1) {
+            baseY = tileHeight;
+        } else if (curRow_ == maxRows_ - 1 && targetRow == 0) {
+            baseY = -static_cast<int32_t>(maxRows_) * tileHeight;
+        }
+    }
+
+    targetX_ = static_cast<int16_t>(baseX);
+    targetY_ = static_cast<int16_t>(baseY);
+    targetCol_ = targetCol;
+    targetRow_ = targetRow;
+
+    StopAnimator();
+
+    if (needAnimator) {
+        SetDragStartValue(contentX_, contentY_);
+        SetDragEndValue(targetX_, targetY_);
+        scrollAnimator_.Start();
     } else {
         contentX_ = targetX_;
         contentY_ = targetY_;
-        curCol_ = col;
-        curRow_ = row;
-        pendingNextCol_ = -1;
-        pendingNextRow_ = -1;
-        UpdateChildrenPosition();
+        curCol_ = targetCol;
+        curRow_ = targetRow;
+        UIView* curView = GetTileView(curCol_, curRow_);
+        if (curView == nullptr) {
+            return;
+        }
+        curView_ = curView;
+        LayoutTiles();
+        RestoreTransitionZIndex();
+        ResetEffect();
     }
 }
 
-void UITileView::SetLoop(bool loop)
+void UITileView::SetAnimatorTime(uint16_t time)
 {
-    SetLoop(loop, loop);
+    scrollAnimator_.SetTime(time);
 }
 
-void UITileView::SetLoop(bool hor, bool ver)
+void UITileView::StopAnimator()
 {
-    loopHor_ = hor;
-    loopVer_ = ver;
-    isLoop_ = hor || ver;
-    RecomputeTotalSpan();
-    UpdateChildrenPosition();
+    if (scrollAnimator_.GetState() != Animator::STOP) {
+        scrollAnimator_.Stop();
+    }
+    axisLocked_ = false;
 }
 
-// ==================== 转场效果配置 ====================
+// ============================================================================
+// Animator Callback
+// ============================================================================
 
-/**
- * @brief 为指定瓦片的特定方向设置转场效果
- *
- * 使用说明：
- * 1. 每个瓦片可以为4个方向（左、右、上、下）分别设置不同的转场效果
- * 2. direction 参数支持位掩码组合，例如：
- *    - TDIR_LEFT | TDIR_RIGHT：同时设置左右方向
- *    - TDIR_ALL：设置所有方向
- * 3. 内置转场效果：
- *    - defaultSlideTransition_：滑动转场（默认）
- *    - defaultCoverTransition_：覆盖转场
- *
- * 示例代码：
- * @code
- *   // 为第(0,0)个瓦片的左侧方向设置覆盖转场
- *   tileView->SetTransitionEffect(0, 0, TDIR_LEFT, &UITileView::defaultCoverTransition_);
- *
- *   // 为第(1,0)个瓦片的所有方向设置滑动转场
- *   tileView->SetTransitionEffect(1, 0, TDIR_ALL, &UITileView::defaultSlideTransition_);
- * @endcode
- *
- * @param col 瓦片的列索引
- * @param row 瓦片的行索引
- * @param direction 方向位掩码（TDIR_LEFT/RIGHT/TOP/BOTTOM 或其组合）
- * @param transition 转场效果对象指针
- */
-void UITileView::SetTransitionEffect(uint8_t col, uint8_t row, uint8_t direction, TileTransition* transition)
+void UITileView::SetDragStartValue(int16_t startValueX, int16_t startValueY)
 {
-    if (transition == nullptr) {
-        return;
-    }
-
-    // 使用接口查找 TileInfo，避免在调用处显式遍历链表，保持简洁
-    TileInfo* info = FindTileInfo(col, row);
-    if (info == nullptr) {
-        return;
-    }
-
-    if (direction == TDIR_ALL) {
-        info->transitions[0] = transition;
-        info->transitions[1] = transition;
-        info->transitions[2] = transition;
-        info->transitions[3] = transition;
-        return;
-    }
-    if (direction == TDIR_HOR) {
-        info->transitions[0] = transition;
-        info->transitions[1] = transition;
-        return;
-    }
-    if (direction == TDIR_VER) {
-        info->transitions[2] = transition;
-        info->transitions[3] = transition;
-        return;
-    }
-    // transitions 数组索引：0=左, 1=右, 2=上, 3=下
-    if (direction & TDIR_LEFT) {
-        info->transitions[0] = transition;
-    }
-    if (direction & TDIR_RIGHT) {
-        info->transitions[1] = transition;
-    }
-    if (direction & TDIR_TOP) {
-        info->transitions[2] = transition;
-    }
-    if (direction & TDIR_BOTTOM) {
-        info->transitions[3] = transition;
-    }
+    startValueX_ = startValueX;
+    previousValueX_ = startValueX;
+    startValueY_ = startValueY;
+    previousValueY_ = startValueY;
 }
 
-// ==================== 转场效果实现 ====================
-
-/**
- * @brief 滑动转场：源页面和目标页面同时移动
- *
- * 效果说明：
- * - 源页面随拖拽移动
- * - 目标页面从屏幕外滑入
- * - 两个页面保持相邻，无缝衔接
- *
- * @param srcView 当前显示的页面
- * @param dstView 即将显示的页面
- * @param offset 拖拽偏移量（负值=向左/上拖，正值=向右/下拖）
- * @param range 页面尺寸（宽度或高度）
- * @param isHorizontal 是否为水平方向拖拽
- */
-void UITileView::SlideTransition::Apply(UIView* srcView, UIView* dstView, int offset, int range, bool isHorizontal)
+void UITileView::SetDragEndValue(int16_t endValueX, int16_t endValueY)
 {
-    if (srcView == nullptr || dstView == nullptr) {
-        return;
-    }
-
-    if (isHorizontal) {
-        // 水平滑动
-        // 源页面位置 = 拖拽偏移量
-        srcView->SetPosition(static_cast<int16_t>(offset), 0);
-
-        // 目标页面位置计算：
-        // - 向左拖（offset < 0）：目标页面从右侧滑入，初始位置 = offset + range
-        // - 向右拖（offset > 0）：目标页面从左侧滑入，初始位置 = offset - range
-        int dstX = offset + (offset < 0 ? range : -range);
-        dstView->SetPosition(static_cast<int16_t>(dstX), 0);
-    } else {
-        // 垂直滑动
-        srcView->SetPosition(0, static_cast<int16_t>(offset));
-        int dstY = offset + (offset < 0 ? range : -range);
-        dstView->SetPosition(0, static_cast<int16_t>(dstY));
-    }
+    endValueX_ = endValueX;
+    endValueY_ = endValueY;
 }
 
-/**
- * @brief 覆盖转场：源页面保持不动，目标页面从上方滑入覆盖
- *
- * 效果说明：
- * - 源页面固定在原位（0, 0）
- * - 目标页面从屏幕外滑入，逐渐覆盖源页面
- * - 目标页面始终在源页面上层（通过 MoveChildToFront 实现）
- *
- * 适用场景：
- * - 类似 iOS 的 push 动画
- * - 强调新内容的进入感
- *
- * @param srcView 当前显示的页面（保持不动）
- * @param dstView 即将显示的页面（滑入覆盖）
- * @param offset 拖拽偏移量
- * @param range 页面尺寸
- * @param isHorizontal 是否为水平方向拖拽
- */
-void UITileView::CoverTransition::Apply(UIView* srcView, UIView* dstView, int offset, int range, bool isHorizontal)
+void UITileView::ResetCallback()
 {
-    if (srcView == nullptr || dstView == nullptr) {
-        return;
-    }
-
-    // 源页面固定在原位
-    srcView->SetPosition(0, 0);
-
-    // 计算目标页面的滑入位置
-    // 目标页面从屏幕外开始，随拖拽逐渐移动到 (0, 0)
-    if (isHorizontal) {
-        // 水平覆盖
-        // - 向左拖（offset < 0）：目标页面从右侧（range）滑入到当前位置（range + offset）
-        //   当 offset = -range 时，目标页面完全覆盖（位置 = 0）
-        // - 向右拖（offset > 0）：目标页面从左侧（-range）滑入
-        int dstX = (offset < 0 ? range : -range) + offset;
-        dstView->SetPosition(static_cast<int16_t>(dstX), 0);
-    } else {
-        // 垂直覆盖
-        int dstY = (offset < 0 ? range : -range) + offset;
-        dstView->SetPosition(0, static_cast<int16_t>(dstY));
-    }
-
-    // 确保目标页面在源页面上层，实现覆盖效果
-    UIView* parent = dstView->GetParent();
-    if (parent != nullptr) {
-        UITileView* tileView = static_cast<UITileView*>(parent);
-        tileView->MoveChildToFront(dstView);
-    }
+    startValueX_ = 0;
+    endValueX_ = 0;
+    startValueY_ = 0;
+    endValueY_ = 0;
 }
 
-/**
- * @brief 将指定子视图移到最前端（Z轴顺序）
- *
- * 实现原理：
- * - 先从视图组中移除该视图
- * - 再重新添加到视图组（会被添加到末尾，即最上层）
- *
- * @param view 要移到前端的视图
- */
-void UITileView::MoveChildToFront(UIView* view)
+void UITileView::ResetEffect()
 {
-    if (view == nullptr) {
-        return;
+    for (uint16_t i = 0; i < MAX_TILES; i++) {
+        TileInfo* tile = &tiles_[i];
+        if (tile == nullptr) {
+            continue;
+        }
+        UIView* view = tile->view;
+        if (view == nullptr) {
+            continue;
+        }
+        view->ResetTransParameter();
+        view->SetOpaScale(OPA_OPAQUE);
     }
-    UIViewGroup::Remove(view);
-    UIViewGroup::Add(view);
-}
-
-bool UITileView::OnDragStartEvent(const DragEvent& event)
-{
-    StopAnimation();
-
-    int dx = event.GetDeltaX();
-    int dy = event.GetDeltaY();
-
-    if (dx != 0 || dy != 0) {
-        if (abs(dx) > abs(dy)) {
-            lockHorizontal_ = true;
-        } else {
-            lockHorizontal_ = false;
-        }
-    }
-    return UIView::OnDragStartEvent(event);
-}
-
-bool UITileView::OnDragEvent(const DragEvent& event)
-{
-    StopAnimation();
-
-    if (lockHorizontal_) {
-        DragXInner(static_cast<int16_t>(event.GetDeltaX()));
-    } else {
-        DragYInner(static_cast<int16_t>(event.GetDeltaY()));
-    }
-
-    return UIView::OnDragEvent(event);
-}
-
-bool UITileView::OnDragEndEvent(const DragEvent& event)
-{
-    uint32_t width = static_cast<uint32_t>(GetWidth());
-    uint32_t height = static_cast<uint32_t>(GetHeight());
-    if (width == 0u || height == 0u) {
-        return UIView::OnDragEndEvent(event);
-    }
-
-    int estimatedCol = 0;
-    int estimatedRow = 0;
-
-    if (loopHor_ || loopVer_) {
-        estimatedCol = static_cast<int16_t>(round(static_cast<float>(-contentX_) / static_cast<float>(width)));
-        estimatedRow = static_cast<int16_t>(round(static_cast<float>(-contentY_) / static_cast<float>(height)));
-
-        int normCol = estimatedCol;
-        if (loopHor_) {
-            int maxC = maxCol_ + 1;
-            normCol = estimatedCol % maxC;
-            if (normCol < 0) {
-                normCol += maxC;
-            }
-        } else {
-            if (normCol < 0) {
-                normCol = 0;
-            }
-            if (normCol > maxCol_) {
-                normCol = maxCol_;
-            }
-        }
-
-        int normRow = estimatedRow;
-        if (loopVer_) {
-            int maxR = maxRow_ + 1;
-            normRow = estimatedRow % maxR;
-            if (normRow < 0) {
-                normRow += maxR;
-            }
-        } else {
-            if (normRow < 0) {
-                normRow = 0;
-            }
-            if (normRow > maxRow_) {
-                normRow = maxRow_;
-            }
-        }
-
-        if (GetTile(static_cast<uint8_t>(normCol), static_cast<uint8_t>(normRow)) != nullptr) {
-            animSrcCol_ = curCol_;
-            animSrcRow_ = curRow_;
-            SetCurrentTile(static_cast<uint8_t>(normCol), static_cast<uint8_t>(normRow), true);
-        } else {
-            animSrcCol_ = curCol_;
-            animSrcRow_ = curRow_;
-            SetCurrentTile(curCol_, curRow_, true);
-        }
-    } else {
-        estimatedCol = (-contentX_ + static_cast<int>(width / 2)) / static_cast<int>(width);
-        estimatedRow = (-contentY_ + static_cast<int>(height / 2)) / static_cast<int>(height);
-
-        if (estimatedCol < 0) {
-            estimatedCol = 0;
-        }
-        if (estimatedRow < 0) {
-            estimatedRow = 0;
-        }
-
-        // 检查是否存在精确匹配
-        if (GetTile(static_cast<uint8_t>(estimatedCol), static_cast<uint8_t>(estimatedRow)) != nullptr) {
-            animSrcCol_ = curCol_;
-            animSrcRow_ = curRow_;
-            SetCurrentTile(static_cast<uint8_t>(estimatedCol), static_cast<uint8_t>(estimatedRow), true);
-        } else {
-            animSrcCol_ = curCol_;
-            animSrcRow_ = curRow_;
-            SetCurrentTile(curCol_, curRow_, true);
-        }
-    }
-
-    return UIView::OnDragEndEvent(event);
-}
-
-// ==================== 位置更新核心逻辑 ====================
-
-/**
- * @brief 更新所有子视图（瓦片）的位置
- *
- * 该方法根据当前内容偏移量和拖拽状态来计算并设置每个瓦片的显示位置。
- *
- * 工作模式：
- * 1. 静止状态（dragX/dragY ≈ 0）：所有瓦片按网格布局排列
- * 2. 拖拽状态：应用转场效果，仅更新源瓦片和目标瓦片
- */
-void UITileView::UpdateChildrenPosition()
-{
-    int16_t width = GetWidth();
-    int16_t height = GetHeight();
-
-    int dragX = contentX_ - targetX_;
-    int dragY = contentY_ - targetY_;
-    // GRAPHIC_LOGI("UITileView::UpdateChildrenPosition dragX: %d, dragY: %d, contentX_: %d, contentY_: %d", dragX, dragY, contentX_, contentY_);
-    // ========== 模式1：静止状态 ==========
-    if (abs(dragX) <= 1 && abs(dragY) <= 1) {
-        GRAPHIC_LOGI("UITileView::UpdateChildrenPosition dragX: %d, dragY: %d, contentX_: %d, contentY_: %d", dragX, dragY, contentX_, contentY_);
-        // 所有瓦片按标准网格布局
-        ListNode<TileInfo*>* node = tileList_.Begin();
-        while (node != tileList_.End()) {
-            TileInfo* info = node->data_;
-            if (info && info->view) {
-                PlaceTileAtGrid(info->view, info->col, info->row, width, height, contentX_, contentY_);
-            }
-            node = node->next_;
-        }
-        Invalidate();
-        return;
-    }
-
-    // ========== 模式2：拖拽状态 ==========
-
-    // 判断拖拽方向
-    bool isHor = abs(dragX) > abs(dragY);
-    int offset = isHor ? dragX : dragY;
-    int range = isHor ? static_cast<int>(width) : static_cast<int>(height);
-
-    // 计算目标瓦片坐标
-    int dstCol = curCol_;
-    int dstRow = curRow_;
-    int transitionIdx = 0;
-
-    if (isHor) {
-        if (dragX < 0) {
-            dstCol++;
-            transitionIdx = 0;  // TDIR_LEFT
-        } else {
-            dstCol--;
-            transitionIdx = 1;  // TDIR_RIGHT
-        }
-    } else {
-        if (dragY < 0) {
-            dstRow++;
-            transitionIdx = 2;  // TDIR_TOP
-        } else {
-            dstRow--;
-            transitionIdx = 3;  // TDIR_BOTTOM
-        }
-    }
-
-    // 循环模式下的索引归一化
-    if (loopHor_) {
-        int maxC = maxCol_ + 1;
-        if (maxC > 0) {
-            dstCol = dstCol % maxC;
-            if (dstCol < 0) {
-                dstCol += maxC;
-            }
-        }
-    }
-    if (loopVer_) {
-        int maxR = maxRow_ + 1;
-        if (maxR > 0) {
-            dstRow = dstRow % maxR;
-            if (dstRow < 0) {
-                dstRow += maxR;
-            }
-        }
-    }
-
-    // 查找源瓦片、目标瓦片和转场效果
-    UIView* srcView = nullptr;
-    UIView* dstView = nullptr;
-    TileTransition* transition = nullptr;
-
-    ListNode<TileInfo*>* node = tileList_.Begin();
-    while (node != tileList_.End()) {
-        TileInfo* info = node->data_;
-        if (info && info->view) {
-            bool isSrc = (info->col == curCol_ && info->row == curRow_);
-            bool isDst = (info->col == dstCol && info->row == dstRow);
-
-            if (isSrc) {
-                srcView = info->view;
-            } else if (isDst) {
-                dstView = info->view;
-            } else {
-                PlaceTileAtGrid(info->view, info->col, info->row, width, height, contentX_, contentY_);
-            }
-            if (animSrcCol_ >= 0 && animSrcRow_ >= 0 && info->col == animSrcCol_ && info->row == animSrcRow_) {
-                transition = info->transitions[transitionIdx];
-            } else if (animSrcCol_ < 0 && animSrcRow_ < 0 && isSrc) {
-                transition = info->transitions[transitionIdx];
-            }
-        }
-        node = node->next_;
-    }
-
-    // 应用转场效果
-    if (srcView != nullptr && dstView != nullptr && transition != nullptr) {
-        transition->Apply(srcView, dstView, offset, range, isHor);
-    }
-
-    Invalidate();
 }
 
 void UITileView::Callback(UIView* view)
 {
-    (void)view;
-    uint32_t runTime = animator_.GetRunTime();
-    uint32_t duration = animator_.GetTime();
-    if (duration == 0) {
-        GRAPHIC_LOGE("UITileView::%s: invalid duration", __FUNCTION__);
+    if (view == nullptr) {
         return;
     }
-    if (runTime >= duration) {
-        contentX_ = targetX_;
-        contentY_ = targetY_;
-    } else {
-        contentX_ = easingFunc_(static_cast<int16_t>(startX_), static_cast<int16_t>(targetX_),
-                                 static_cast<uint16_t>(runTime), static_cast<uint16_t>(duration));
-        contentY_ = easingFunc_(static_cast<int16_t>(startY_), static_cast<int16_t>(targetY_),
-                                 static_cast<uint16_t>(runTime), static_cast<uint16_t>(duration));
-    }
-    UpdateChildrenPosition();
 
-    if (contentX_ == targetX_ && contentY_ == targetY_) {
-        StopAnimation();
+    uint32_t runTime = scrollAnimator_.GetRunTime();
+    uint32_t duration = scrollAnimator_.GetTime();
+
+    if (duration == 0) {
+        GRAPHIC_LOGE("UITileView::Callback: invalid duration");
+        return;
+    }
+
+    if (runTime <= duration) {
+        int16_t currentX = easingFunc_(static_cast<float>(startValueX_),
+                                       static_cast<float>(endValueX_),
+                                       runTime,
+                                       duration);
+        int16_t currentY = easingFunc_(static_cast<float>(startValueY_),
+                                       static_cast<float>(endValueY_),
+                                       runTime,
+                                       duration);
+
+        DragXInner(currentX - previousValueX_);
+        DragYInner(currentY - previousValueY_);
+        previousValueX_ = currentX;
+        previousValueY_ = currentY;
+    } else {
+        StopAnimator();
+        contentX_ = endValueX_;
+        contentY_ = endValueY_;
+        LayoutTiles();
+        Invalidate();
     }
 }
+
+void UITileView::OnStop(UIView& view)
+{
+    (void)view;
+    bool tileChanged = (targetCol_ != curCol_) || (targetRow_ != curRow_);
+
+    UIView* targetView = GetTileView(targetCol_, targetRow_);
+    if (targetView == nullptr) {
+        RestoreTransitionZIndex();
+        ResetCallback();
+        ResetEffect();
+        return;
+    }
+
+    curCol_ = targetCol_;
+    curRow_ = targetRow_;
+    curView_ = targetView;
+    RestoreTransitionZIndex();
+
+    // Normalize content position in loop mode
+    contentX_ = NormalizeContentLoop(contentX_, tileWidth_, maxCols_);
+    contentY_ = NormalizeContentLoop(contentY_, tileHeight_, maxRows_);
+
+    ResetCallback();
+    ResetEffect();
+
+    if (tileChanged) {
+        NotifyTileChange();
+    }
+}
+
+void UITileView::NotifyTileChange()
+{
+    if (tileChangeListener_ != nullptr) {
+        tileChangeListener_->OnTileChange(*this, curCol_, curRow_);
+    }
+}
+
+// ============================================================================
+// Drag Handling
+// ============================================================================
 
 bool UITileView::DragXInner(int16_t distance)
 {
@@ -592,24 +1270,29 @@ bool UITileView::DragXInner(int16_t distance)
     }
 
     uint8_t allowedDir = GetAllowedDirection(curCol_, curRow_);
-    if ((distance < 0 && (allowedDir & TDIR_LEFT) == 0) ||
-        (distance > 0 && (allowedDir & TDIR_RIGHT) == 0)) {
+
+    if (distance > 0 && !(allowedDir & TDIR_RIGHT)) {
+        return false;
+    }
+    if (distance < 0 && !(allowedDir & TDIR_LEFT)) {
         return false;
     }
 
-    int newContentX = contentX_ + static_cast<int>(distance);
     if (!loopHor_) {
-        int width = static_cast<int>(GetWidth());
-        int minX = -static_cast<int>(maxCol_) * width;
-        int maxX = 0;
-        if (newContentX > maxX) {
-            distance = static_cast<int16_t>(maxX - contentX_);
-        } else if (newContentX < minX) {
-            distance = static_cast<int16_t>(minX - contentX_);
+        int16_t tileWidth = tileWidth_;
+        int16_t minX = -static_cast<int16_t>(maxCols_ - 1) * tileWidth;
+        int16_t maxX = 0;
+
+        if (contentX_ + distance > maxX) {
+            distance = maxX - contentX_;
+        } else if (contentX_ + distance < minX) {
+            distance = minX - contentX_;
         }
     }
 
-    MoveChildByOffset(distance, 0);
+    contentX_ += distance;
+    LayoutTiles();
+    Invalidate();
     return true;
 }
 
@@ -620,156 +1303,180 @@ bool UITileView::DragYInner(int16_t distance)
     }
 
     uint8_t allowedDir = GetAllowedDirection(curCol_, curRow_);
-    if ((distance < 0 && (allowedDir & TDIR_TOP) == 0) ||
-        (distance > 0 && (allowedDir & TDIR_BOTTOM) == 0)) {
+
+    if (distance > 0 && !(allowedDir & TDIR_BOTTOM)) {
+        return false;
+    }
+    if (distance < 0 && !(allowedDir & TDIR_TOP)) {
         return false;
     }
 
-    int newContentY = contentY_ + static_cast<int>(distance);
     if (!loopVer_) {
-        int height = static_cast<int>(GetHeight());
-        int minY = -static_cast<int>(maxRow_) * height;
-        int maxY = 0;
-        if (newContentY > maxY) {
-            distance = static_cast<int16_t>(maxY - contentY_);
-        } else if (newContentY < minY) {
-            distance = static_cast<int16_t>(minY - contentY_);
+        int16_t tileHeight = tileHeight_;
+        int16_t minY = -static_cast<int16_t>(maxRows_ - 1) * tileHeight;
+        int16_t maxY = 0;
+
+        if (contentY_ + distance > maxY) {
+            distance = maxY - contentY_;
+        } else if (contentY_ + distance < minY) {
+            distance = minY - contentY_;
         }
     }
 
-    MoveChildByOffset(0, distance);
+    contentY_ += distance;
+    LayoutTiles();
+    Invalidate();
     return true;
 }
 
-void UITileView::MoveChildByOffset(int16_t offsetX, int16_t offsetY)
+bool UITileView::OnDragStartEvent(const DragEvent& event)
 {
-    if (offsetX == 0 && offsetY == 0) {
-        return;
-    }
-    contentX_ += static_cast<int>(offsetX);
-    contentY_ += static_cast<int>(offsetY);
+    StopAnimator();
+    oldDir_ = 0;
+    ResetDragDelta();
 
-    if (loopHor_ && totalW_ > 0) {
-        int totalW = static_cast<int>(totalW_);
-        int halfW = totalW / 2;
-        int mx = contentX_ % totalW;
-        if (mx > halfW) {
-            mx -= totalW;
-        } else if (mx < -halfW) {
-            mx += totalW;
+    uint8_t dragDir = event.GetDragDirection();
+    switch (dragDir) {
+        case DragEvent::DIRECTION_LEFT_TO_RIGHT:
+            direction_ = TDIR_RIGHT;
+            UpdateDirAndZIndex(1);
+            break;
+        case DragEvent::DIRECTION_RIGHT_TO_LEFT:
+            direction_ = TDIR_LEFT;
+            UpdateDirAndZIndex(-1);
+            break;
+        case DragEvent::DIRECTION_TOP_TO_BOTTOM:
+            direction_ = TDIR_BOTTOM;
+            UpdateDirAndZIndex(-1);
+            break;
+        case DragEvent::DIRECTION_BOTTOM_TO_TOP:
+            direction_ = TDIR_TOP;
+            UpdateDirAndZIndex(1);
+            break;
+        default:
+            direction_ = TDIR_NONE;
+            break;
+    }
+    return UIView::OnDragStartEvent(event);
+}
+
+bool UITileView::OnDragEvent(const DragEvent& event)
+{
+    StopAnimator();
+    if (curView_ == nullptr) {
+        return UIView::OnDragEvent(event);
+    }
+
+    if (direction_ & TDIR_HOR) {
+        int16_t deltaX = event.GetDeltaX();
+        DragXInner(deltaX);
+        UpdateLastDelta(deltaX);
+
+        int16_t curX = curView_->GetX();
+        if (ShouldUpdateDir(curX)) {
+            UpdateDirAndZIndex();
         }
-        contentX_ = mx;
-    }
-    if (loopVer_ && totalH_ > 0) {
-        int totalH = static_cast<int>(totalH_);
-        int halfH = totalH / 2;
-        int my = contentY_ % totalH;
-        if (my > halfH) {
-            my -= totalH;
-        } else if (my < -halfH) {
-            my += totalH;
+    } else if (direction_ & TDIR_VER) {
+        int16_t deltaY = event.GetDeltaY();
+        DragYInner(deltaY);
+        UpdateLastDelta(deltaY);
+
+        int16_t curY = curView_->GetY();
+        if (ShouldUpdateDir(curY)) {
+            UpdateDirAndZIndex();
         }
-        contentY_ = my;
     }
 
-    UpdateChildrenPosition();
+    return UIView::OnDragEvent(event);
 }
 
-void UITileView::OnStop(UIView& view)
+bool UITileView::OnDragEndEvent(const DragEvent& event)
 {
-    (void)view;
-    contentX_ = targetX_;
-    contentY_ = targetY_;
-    animSrcCol_ = -1;
-    animSrcRow_ = -1;
-    if (pendingNextCol_ >= 0 && pendingNextRow_ >= 0) {
-        curCol_ = static_cast<uint8_t>(pendingNextCol_);
-        curRow_ = static_cast<uint8_t>(pendingNextRow_);
-        pendingNextCol_ = -1;
-        pendingNextRow_ = -1;
+    int16_t distanceX = 0;
+    int16_t distanceY = 0;
+
+    if (direction_ & TDIR_HOR) {
+        distanceX = event.GetCurrentPos().x - event.GetPreLastPoint().x;
+    } else if (direction_ & TDIR_VER) {
+        distanceY = event.GetCurrentPos().y - event.GetPreLastPoint().y;
     }
-    UpdateChildrenPosition();
+
+    uint16_t targetCol = curCol_;
+    uint16_t targetRow = curRow_;
+    UpdateCurrentTileByThrow(distanceX, distanceY, targetCol, targetRow);
+    SwitchToTile(targetCol, targetRow, true);
+
+    Invalidate();
+
+    return UIView::OnDragEndEvent(event);
 }
 
-void UITileView::StopAnimation()
+void UITileView::UpdateCurrentTileByThrow(int16_t distanceX,
+                                          int16_t distanceY,
+                                          uint16_t& targetCol,
+                                          uint16_t& targetRow) const
 {
-    if (animator_.GetState() != Animator::STOP) {
-        animator_.Stop();
-    }
-}
+    int16_t tileWidth = tileWidth_;
+    int16_t tileHeight = tileHeight_;
 
-UIView* UITileView::GetTile(uint8_t col, uint8_t row)
-{
-    ListNode<TileInfo*>* node = tileList_.Begin();
-    while (node != tileList_.End()) {
-        TileInfo* info = node->data_;
-        if (info && info->col == col && info->row == row) {
-            return info->view;
+    targetCol = curCol_;
+    targetRow = curRow_;
+
+    if ((direction_ & TDIR_HOR) && tileWidth > 0) {
+        int16_t threshold = tileWidth / UITileView::SNAP_THRESHOLD_RATIO;
+        int16_t offset = contentX_ + static_cast<int16_t>(curCol_) * tileWidth;
+
+        if (MATH_ABS(offset) >= threshold) {
+            if (offset < 0) {
+                targetCol = static_cast<uint16_t>(NormalizeIndex(static_cast<int16_t>(curCol_) + 1,
+                                                                 static_cast<int16_t>(maxCols_),
+                                                                 loopHor_));
+            } else if (offset > 0) {
+                targetCol = static_cast<uint16_t>(NormalizeIndex(static_cast<int16_t>(curCol_) - 1,
+                                                                 static_cast<int16_t>(maxCols_),
+                                                                 loopHor_));
+            }
+        } else {
+            if (GetMaxAbsLastDelta() >= UITileView::THROW_THRESHOLD) {
+                if (offset < 0 && distanceX < 0) {
+                    targetCol = static_cast<uint16_t>(NormalizeIndex(static_cast<int16_t>(curCol_) + 1,
+                                                                     static_cast<int16_t>(maxCols_),
+                                                                     loopHor_));
+                } else if (offset > 0 && distanceX > 0) {
+                    targetCol = static_cast<uint16_t>(NormalizeIndex(static_cast<int16_t>(curCol_) - 1,
+                                                                     static_cast<int16_t>(maxCols_),
+                                                                     loopHor_));
+                }
+            }
         }
-        node = node->next_;
-    }
-    return nullptr;
-}
+    } else if ((direction_ & TDIR_VER) && tileHeight > 0) {
+        int16_t threshold = tileHeight / UITileView::SNAP_THRESHOLD_RATIO;
+        int16_t offset = contentY_ + static_cast<int16_t>(curRow_) * tileHeight;
 
-uint8_t UITileView::GetAllowedDirection(uint8_t col, uint8_t row) const
-{
-    // 封装后的接口：返回指定瓦片的允许方向，默认允许全部
-    TileInfo* info = const_cast<UITileView*>(this)->FindTileInfo(col, row);
-    return (info == nullptr) ? TDIR_ALL : info->direction;
-}
-
-UITileView::TileInfo* UITileView::FindTileInfo(uint8_t col, uint8_t row) const
-{
-    // 统一的内部查找接口，集中处理链表遍历，调用方无需关心实现细节
-    ListNode<TileInfo*>* node = const_cast<UITileView*>(this)->tileList_.Begin();
-    while (node != const_cast<UITileView*>(this)->tileList_.End()) {
-        TileInfo* info = node->data_;
-        if (info && info->col == col && info->row == row) {
-            return info;
+        if (MATH_ABS(offset) >= threshold) {
+            if (offset < 0) {
+                targetRow = static_cast<uint16_t>(NormalizeIndex(static_cast<int16_t>(curRow_) + 1,
+                                                                 static_cast<int16_t>(maxRows_),
+                                                                 loopVer_));
+            } else if (offset > 0) {
+                targetRow = static_cast<uint16_t>(NormalizeIndex(static_cast<int16_t>(curRow_) - 1,
+                                                                 static_cast<int16_t>(maxRows_),
+                                                                 loopVer_));
+            }
+        } else {
+            if (GetMaxAbsLastDelta() >= UITileView::THROW_THRESHOLD) {
+                if (offset < 0 && distanceY < 0) {
+                    targetRow = static_cast<uint16_t>(NormalizeIndex(static_cast<int16_t>(curRow_) + 1,
+                                                                     static_cast<int16_t>(maxRows_),
+                                                                     loopVer_));
+                } else if (offset > 0 && distanceY > 0) {
+                    targetRow = static_cast<uint16_t>(NormalizeIndex(static_cast<int16_t>(curRow_) - 1,
+                                                                     static_cast<int16_t>(maxRows_),
+                                                                     loopVer_));
+                }
+            }
         }
-        node = node->next_;
     }
-    return nullptr;
 }
 
-void UITileView::RecomputeTotalSpan()
-{
-    uint32_t w = static_cast<uint32_t>(GetWidth());
-    uint32_t h = static_cast<uint32_t>(GetHeight());
-    totalW_ = static_cast<uint32_t>(static_cast<uint32_t>(maxCol_ + 1) * w);
-    totalH_ = static_cast<uint32_t>(static_cast<uint32_t>(maxRow_ + 1) * h);
-}
-
-void UITileView::PlaceTileAtGrid(UIView* view, uint8_t col, uint8_t row,
-                                 uint32_t width, uint32_t height,
-                                 int contentX, int contentY)
-{
-    if (view == nullptr) {
-        return;
-    }
-    int rx = static_cast<int>(col) * static_cast<int>(width) + contentX;
-    int ry = static_cast<int>(row) * static_cast<int>(height) + contentY;
-
-    if (loopHor_ && totalW_ > 0) {
-        int halfW = static_cast<int>(totalW_ / 2);
-        int mx = rx % static_cast<int>(totalW_);
-        if (mx > halfW) {
-            mx -= static_cast<int>(totalW_);
-        } else if (mx < -halfW) {
-            mx += static_cast<int>(totalW_);
-        }
-        rx = mx;
-    }
-    if (loopVer_ && totalH_ > 0) {
-        int halfH = static_cast<int>(totalH_ / 2);
-        int my = ry % static_cast<int>(totalH_);
-        if (my > halfH) {
-            my -= static_cast<int>(totalH_);
-        } else if (my < -halfH) {
-            my += static_cast<int>(totalH_);
-        }
-        ry = my;
-    }
-    view->SetPosition(static_cast<int16_t>(rx), static_cast<int16_t>(ry));
-}
-} // 命名空间 OHOS
+} // namespace OHOS
